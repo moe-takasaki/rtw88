@@ -39,9 +39,9 @@ values now match observed Android readback; association still times out.
 
 | Area | Android module | Current `s9082c` branch | Evidence and limit |
 | --- | --- | --- | --- |
-| Join-time MAC transition | Temporarily adjusts RCR, RX filter map and retry limit while joining | Initial SIFS, EDCA, rate fallback and ACK/retry values now match; no Android-style join transition | The combined initial register sequence was tested and did not establish association. The join transition remains untested. |
+| Join-time MAC transition | Temporarily adjusts RCR, RX filter map and retry limit while joining | Initial SIFS, EDCA, rate fallback and ACK/retry values now match; no persistent Android-style join transition | A prepare-stage replay before management TX did not establish association. Failure and success stages remain unported. |
 | TX reports | Enables bits `0xc0` in `TX_RPT_CTRL`, sets `TX_RPT_CTRL+1=0x40` and timer `0xb30f` | Inherited bits `0x03`, maximum MACID `0x20`, timer `0x927c` | A completed test verified Android register readback, enabled mac80211 ACK-status requests and observed numbered report requests, but no RX report type 1/2 arrived. The branch therefore still does not advertise ACK-report support. |
-| Calibration and power tracking | Runs IQK, power-tracking setup, then LCK during HAL initialization; uses SCI tables and BB access | Runs LCK then the adapted IQK at first managed TX; retains RTL8188E power-tracking tables and runtime matrix writes | IQK now produces changing TX values and RX shots. Their effect on TX quality, and the power-tracking path, remain unverified. |
+| Calibration and power tracking | Runs IQK, power-tracking setup, then LCK during HAL initialization; uses SCI tables and BB access | Runs LCK then the adapted IQK at first managed TX; retains RTL8188E power-tracking tables and runtime matrix writes | Skipping IQK while retaining LCK caused authentication to time out on four attempts. IQK is needed for basic TX; power tracking remains unverified. |
 | Firmware and low power | Android firmware initialization, reserved pages, H2C/C2H and power-mode transitions | Reuses the 8188E firmware interface with 9082XS adaptations | The expected TX report is absent; WPA and data traffic have not been established. A no-LPS test could not evaluate the associated state. |
 
 ## What is established
