@@ -52,9 +52,13 @@ static bool rtw_sdio_bus_claim_needed(struct rtw_sdio *rtwsdio)
 
 static u32 rtw_sdio_to_bus_offset(struct rtw_dev *rtwdev, u32 addr)
 {
+	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
+
 	switch (addr & RTW_SDIO_BUS_MSK) {
 	case WLAN_IOREG_OFFSET:
 		addr &= WLAN_IOREG_REG_MSK;
+		if (rtwsdio->is_9082xs)
+			addr |= 0x4000;
 		addr |= FIELD_PREP(REG_SDIO_CMD_ADDR_MSK,
 				   REG_SDIO_CMD_ADDR_MAC_REG);
 		break;
@@ -162,7 +166,11 @@ static u32 rtw_sdio_to_io_address(struct rtw_dev *rtwdev, u32 addr,
 
 static bool rtw_sdio_use_direct_io(struct rtw_dev *rtwdev, u32 addr)
 {
+	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
 	bool might_indirect_under_power_off = rtwdev->chip->id == RTW_CHIP_TYPE_8822C;
+
+	if (rtwsdio->is_9082xs)
+		return true;
 
 	if (!test_bit(RTW_FLAG_POWERON, rtwdev->flags) &&
 	    !rtw_sdio_is_bus_addr(addr) && might_indirect_under_power_off)
@@ -1885,6 +1893,7 @@ int rtw_sdio_probe(struct sdio_func *sdio_func,
 {
 	struct ieee80211_hw *hw;
 	struct rtw_dev *rtwdev;
+	struct rtw_sdio *rtwsdio;
 	int drv_data_size;
 	int ret;
 
@@ -1896,6 +1905,8 @@ int rtw_sdio_probe(struct sdio_func *sdio_func,
 	}
 
 	rtwdev = hw->priv;
+	rtwsdio = (struct rtw_sdio *)rtwdev->priv;
+	rtwsdio->is_9082xs = id->vendor == 0x02e7 && id->device == 0x9082;
 	rtwdev->hw = hw;
 	rtwdev->dev = &sdio_func->dev;
 	rtwdev->chip = (struct rtw_chip_info *)id->driver_data;
