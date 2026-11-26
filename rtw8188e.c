@@ -1642,6 +1642,9 @@ static u8 rtw8188e_default_cck_index(struct rtw_dev *rtwdev)
 	u8 swing = rtw_read8(rtwdev, REG_CCK_SWING);
 	u8 i;
 
+	if (rtwdev->chip->efuse_id == 0x9082)
+		swing = bitrev8(swing);
+
 	for (i = 0; i < RTW8188E_CCK_SWING_TABLE_SIZE; i++) {
 		if (rtw8188e_cck_swing_table_ch1_ch13[i][0] == swing)
 			return i;
@@ -1710,8 +1713,11 @@ static void rtw8188e_pwrtrack_set_cck_pwr(struct rtw_dev *rtwdev, u8 channel)
 	dm_info->txagc_remnant_cck = index - swing;
 	table = channel == 14 ? rtw8188e_cck_swing_table_ch14[swing] :
 			       rtw8188e_cck_swing_table_ch1_ch13[swing];
+	/* 9082XS CCK swing bytes use the reversed BB register bit order. */
 	for (i = 0; i < ARRAY_SIZE(rtw8188e_cck_swing_table_ch14[0]); i++)
-		rtw_write8(rtwdev, REG_CCK_SWING + i, table[i]);
+		rtw_write8(rtwdev, REG_CCK_SWING + i,
+			   rtwdev->chip->efuse_id == 0x9082 ?
+			   bitrev8(table[i]) : table[i]);
 }
 
 static void rtw8188e_phy_set_param(struct rtw_dev *rtwdev)
