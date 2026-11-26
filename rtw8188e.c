@@ -80,6 +80,7 @@ static int rtw9082xs_stage_radio_tables(struct rtw_dev *rtwdev)
 						 BIT_RF_SDM_RSTB)
 
 #define IQK_DELAY_TIME_8188E		10
+#define REG_9082XS_IQK_RF_MODE_TABLE	0x0840
 
 static const struct rtw_pwr_seq_cmd trans_carddis_to_cardemu_8188e[] = {
 	{0x0086,
@@ -1871,11 +1872,32 @@ static void rtw8188e_lck(struct rtw_dev *rtwdev)
 		ret, rf_val, lc_cal);
 }
 
+/* 9082XS direct BB values reverse bit order in each byte. Its masked BB
+ * accessor uses logical bit positions, so masked accesses reverse the raw
+ * register value before and after updating the field.
+ */
+static u32 rtw8188e_iqk_reverse_bytes(u32 val)
+{
+	return bitrev8(val) | (u32)bitrev8(val >> 8) << 8 |
+	       (u32)bitrev8(val >> 16) << 16 |
+	       (u32)bitrev8(val >> 24) << 24;
+}
+
+static u32 rtw8188e_iqk_read_y(struct rtw_dev *rtwdev)
+{
+	u32 val = rtw_read32(rtwdev, REG_IQK_RES_TY);
+
+	/* E9C is read through the masked BB accessor in the 9082XS IQK path. */
+	if (rtwdev->chip->efuse_id == 0x9082)
+		val = rtw8188e_iqk_reverse_bytes(val);
+	return val;
+}
+
 static bool rtw8188e_iqk_tx_ok(struct rtw_dev *rtwdev, bool rx_imr)
 {
 	u32 eac = rtw_read32(rtwdev, REG_IQK_RES_RY);
 	u32 e94 = rtw_read32(rtwdev, REG_IQK_RES_TX);
-	u32 e9c = rtw_read32(rtwdev, REG_IQK_RES_TY);
+	u32 e9c = rtw8188e_iqk_read_y(rtwdev);
 	bool ok = !(eac & BIT(28)) &&
 		  u32_get_bits(e94, BIT_MASK_IQK_RESULT) != IQK_TX_X_ERR &&
 		  u32_get_bits(e9c, BIT_MASK_IQK_RESULT) != IQK_TX_Y_ERR;
@@ -1886,30 +1908,101 @@ static bool rtw8188e_iqk_tx_ok(struct rtw_dev *rtwdev, bool rx_imr)
 	return ok;
 }
 
+static void rtw8188e_iqk_write32(struct rtw_dev *rtwdev, u32 addr, u32 val)
+{
+	if (rtwdev->chip->efuse_id == 0x9082)
+		val = rtw8188e_iqk_reverse_bytes(val);
+	rtw_write32(rtwdev, addr, val);
+}
+
+static void rtw8188e_iqk_write32_mask(struct rtw_dev *rtwdev, u32 addr,
+				      u32 mask, u32 val)
+{
+	u32 logical;
+
+	if (rtwdev->chip->efuse_id != 0x9082) {
+		rtw_write32_mask(rtwdev, addr, mask, val);
+		return;
+	}
+	logical = rtw8188e_iqk_reverse_bytes(rtw_read32(rtwdev, addr));
+	logical = (logical & ~mask) | ((val << __ffs(mask)) & mask);
+	rtw_write32(rtwdev, addr, rtw8188e_iqk_reverse_bytes(logical));
+}
+
+static void rtw8188e_iqk_write32_set(struct rtw_dev *rtwdev, u32 addr,
+				     u32 bits)
+{
+	u32 logical;
+
+	if (rtwdev->chip->efuse_id != 0x9082) {
+		rtw_write32_set(rtwdev, addr, bits);
+		return;
+	}
+	logical = rtw8188e_iqk_reverse_bytes(rtw_read32(rtwdev, addr));
+	rtw_write32(rtwdev, addr,
+		    rtw8188e_iqk_reverse_bytes(logical | bits));
+}
+
+static void rtw8188e_iqk_write32_clr(struct rtw_dev *rtwdev, u32 addr,
+				     u32 bits)
+{
+	u32 logical;
+
+	if (rtwdev->chip->efuse_id != 0x9082) {
+		rtw_write32_clr(rtwdev, addr, bits);
+		return;
+	}
+	logical = rtw8188e_iqk_reverse_bytes(rtw_read32(rtwdev, addr));
+	rtw_write32(rtwdev, addr,
+		    rtw8188e_iqk_reverse_bytes(logical & ~bits));
+}
+
+static void rtw8188e_iqk_9082xs_rf_mode(struct rtw_dev *rtwdev,
+					 bool receive)
+{
+	rtw_write32(rtwdev, REG_9082XS_IQK_RF_MODE_TABLE, 0x701f0005);
+	rtw_write32(rtwdev, REG_9082XS_IQK_RF_MODE_TABLE, 0xc0c00000);
+	rtw_write32(rtwdev, REG_9082XS_IQK_RF_MODE_TABLE, 0xc00800f0);
+	rtw_write32(rtwdev, REG_9082XS_IQK_RF_MODE_TABLE,
+		    receive ? 0xc0f4fe5f : 0xc0f488de);
+}
+
 static void rtw8188e_iqk_trigger(struct rtw_dev *rtwdev)
 {
-	rtw_write32(rtwdev, REG_IQK_AGC_PTS_11N, 0xf9000000);
-	rtw_write32(rtwdev, REG_IQK_AGC_PTS_11N, 0xf8000000);
+	rtw8188e_iqk_write32(rtwdev, REG_IQK_AGC_PTS_11N, 0xf9000000);
+	rtw8188e_iqk_write32(rtwdev, REG_IQK_AGC_PTS_11N, 0xf8000000);
 	msleep(IQK_DELAY_TIME_8188E);
 }
 
 static bool rtw8188e_iqk_tx_path_a(struct rtw_dev *rtwdev, bool rx_imr)
 {
 	if (rx_imr) {
-		rtw_write32_mask(rtwdev, REG_FPGA0_IQK_11N, BIT_MASK_IQK_MODE, 0);
-		rtw_write_rf(rtwdev, RF_PATH_A, RF_LUTWE, RFREG_MASK, 0x800a0);
-		rtw_write_rf(rtwdev, RF_PATH_A, RF_MODE_TABLE_ADDR, RFREG_MASK, 0x30000);
-		rtw_write_rf(rtwdev, RF_PATH_A, RF_MODE_TABLE_DATA0, RFREG_MASK, 0x0000f);
-		rtw_write_rf(rtwdev, RF_PATH_A, RF_MODE_TABLE_DATA1, RFREG_MASK, 0xf117b);
-		rtw_write32_mask(rtwdev, REG_FPGA0_IQK_11N, BIT_MASK_IQK_MODE, 0x808000);
-		rtw_write32(rtwdev, REG_TXIQK_11N, 0x01007c00);
-		rtw_write32(rtwdev, REG_RXIQK_11N, 0x81004800);
+		rtw8188e_iqk_write32_mask(rtwdev, REG_FPGA0_IQK_11N,
+					  BIT_MASK_IQK_MODE, 0);
+		if (rtwdev->chip->efuse_id == 0x9082) {
+			rtw8188e_iqk_9082xs_rf_mode(rtwdev, false);
+		} else {
+			rtw_write_rf(rtwdev, RF_PATH_A, RF_LUTWE,
+				     RFREG_MASK, 0x800a0);
+			rtw_write_rf(rtwdev, RF_PATH_A, RF_MODE_TABLE_ADDR,
+				     RFREG_MASK, 0x30000);
+			rtw_write_rf(rtwdev, RF_PATH_A, RF_MODE_TABLE_DATA0,
+				     RFREG_MASK, 0x0000f);
+			rtw_write_rf(rtwdev, RF_PATH_A, RF_MODE_TABLE_DATA1,
+				     RFREG_MASK, 0xf117b);
+		}
+		rtw8188e_iqk_write32_mask(rtwdev, REG_FPGA0_IQK_11N,
+					  BIT_MASK_IQK_MODE, 0x808000);
+		rtw8188e_iqk_write32(rtwdev, REG_TXIQK_11N, 0x01007c00);
+		rtw8188e_iqk_write32(rtwdev, REG_RXIQK_11N, 0x81004800);
 	}
-	rtw_write32(rtwdev, REG_TXIQK_TONE_A_11N, 0x10008c1c);
-	rtw_write32(rtwdev, REG_RXIQK_TONE_A_11N, 0x30008c1c);
-	rtw_write32(rtwdev, REG_TXIQK_PI_A_11N, rx_imr ? 0x82160804 : 0x8214032a);
-	rtw_write32(rtwdev, REG_RXIQK_PI_A_11N, 0x28160000);
-	rtw_write32(rtwdev, REG_IQK_AGC_RSP_11N, rx_imr ? 0x0046a911 : 0x00462911);
+	rtw8188e_iqk_write32(rtwdev, REG_TXIQK_TONE_A_11N, 0x10008c1c);
+	rtw8188e_iqk_write32(rtwdev, REG_RXIQK_TONE_A_11N, 0x30008c1c);
+	rtw8188e_iqk_write32(rtwdev, REG_TXIQK_PI_A_11N,
+			 rx_imr ? 0x82160804 : 0x8214032a);
+	rtw8188e_iqk_write32(rtwdev, REG_RXIQK_PI_A_11N, 0x28160000);
+	rtw8188e_iqk_write32(rtwdev, REG_IQK_AGC_RSP_11N,
+			 rx_imr ? 0x0046a911 : 0x00462911);
 	rtw8188e_iqk_trigger(rtwdev);
 	return rtw8188e_iqk_tx_ok(rtwdev, rx_imr);
 }
@@ -1923,20 +2016,31 @@ static bool rtw8188e_iqk_rx_path_a(struct rtw_dev *rtwdev)
 		return false;
 	imr = 0x80007c00 |
 	      (rtw_read32(rtwdev, REG_IQK_RES_TX) & BIT_MASK_IQK_RESULT) |
-	      rtw_read32_mask(rtwdev, REG_IQK_RES_TY, BIT_MASK_IQK_RESULT);
-	rtw_write32(rtwdev, REG_TXIQK_11N, imr);
-	rtw_write32_mask(rtwdev, REG_FPGA0_IQK_11N, BIT_MASK_IQK_MODE, 0);
-	rtw_write_rf(rtwdev, RF_PATH_A, RF_LUTWE, RFREG_MASK, 0x800a0);
-	rtw_write_rf(rtwdev, RF_PATH_A, RF_MODE_TABLE_ADDR, RFREG_MASK, 0x30000);
-	rtw_write_rf(rtwdev, RF_PATH_A, RF_MODE_TABLE_DATA0, RFREG_MASK, 0x0000f);
-	rtw_write_rf(rtwdev, RF_PATH_A, RF_MODE_TABLE_DATA1, RFREG_MASK, 0xf7ffa);
-	rtw_write32_mask(rtwdev, REG_FPGA0_IQK_11N, BIT_MASK_IQK_MODE, 0x808000);
-	rtw_write32(rtwdev, REG_RXIQK_11N, 0x01004800);
-	rtw_write32(rtwdev, REG_TXIQK_TONE_A_11N, 0x30008c1c);
-	rtw_write32(rtwdev, REG_RXIQK_TONE_A_11N, 0x10008c1c);
-	rtw_write32(rtwdev, REG_TXIQK_PI_A_11N, 0x82160c05);
-	rtw_write32(rtwdev, REG_RXIQK_PI_A_11N, 0x28160c05);
-	rtw_write32(rtwdev, REG_IQK_AGC_RSP_11N, 0x0046a911);
+	      u32_get_bits(rtw8188e_iqk_read_y(rtwdev), BIT_MASK_IQK_RESULT);
+	rtw8188e_iqk_write32(rtwdev, REG_TXIQK_11N, imr);
+	rtw8188e_iqk_write32_mask(rtwdev, REG_FPGA0_IQK_11N,
+				  BIT_MASK_IQK_MODE, 0);
+	if (rtwdev->chip->efuse_id == 0x9082) {
+		rtw8188e_iqk_9082xs_rf_mode(rtwdev, true);
+		rtw_write32(rtwdev, REG_FPGA0_IQK_11N, 0x00010100);
+	} else {
+		rtw_write_rf(rtwdev, RF_PATH_A, RF_LUTWE,
+			     RFREG_MASK, 0x800a0);
+		rtw_write_rf(rtwdev, RF_PATH_A, RF_MODE_TABLE_ADDR,
+			     RFREG_MASK, 0x30000);
+		rtw_write_rf(rtwdev, RF_PATH_A, RF_MODE_TABLE_DATA0,
+			     RFREG_MASK, 0x0000f);
+		rtw_write_rf(rtwdev, RF_PATH_A, RF_MODE_TABLE_DATA1,
+			     RFREG_MASK, 0xf7ffa);
+		rtw8188e_iqk_write32_mask(rtwdev, REG_FPGA0_IQK_11N,
+					  BIT_MASK_IQK_MODE, 0x808000);
+	}
+	rtw8188e_iqk_write32(rtwdev, REG_RXIQK_11N, 0x01004800);
+	rtw8188e_iqk_write32(rtwdev, REG_TXIQK_TONE_A_11N, 0x30008c1c);
+	rtw8188e_iqk_write32(rtwdev, REG_RXIQK_TONE_A_11N, 0x10008c1c);
+	rtw8188e_iqk_write32(rtwdev, REG_TXIQK_PI_A_11N, 0x82160c05);
+	rtw8188e_iqk_write32(rtwdev, REG_RXIQK_PI_A_11N, 0x28160c05);
+	rtw8188e_iqk_write32(rtwdev, REG_IQK_AGC_RSP_11N, 0x0046a911);
 	rtw8188e_iqk_trigger(rtwdev);
 	eac = rtw_read32(rtwdev, REG_IQK_RES_RY);
 	ea4 = rtw_read32(rtwdev, REG_IQK_RES_RX);
@@ -1978,9 +2082,12 @@ static void rtw8188e_iqk_restore_regs(struct rtw_dev *rtwdev,
 		rtw_write32(rtwdev, rtw8188e_iqk_bb_regs[i], backup->bb[i]);
 
 	/* Restore RX gain through RF mode. */
-	rtw_write_rf(rtwdev, RF_PATH_A, RF_MODE, RFREG_MASK, 0x32ed3);
-	rtw_write32(rtwdev, REG_TXIQK_TONE_A_11N, 0x01008c00);
-	rtw_write32(rtwdev, REG_RXIQK_TONE_A_11N, 0x01008c00);
+	if (rtwdev->chip->efuse_id == 0x9082)
+		rtw_write32(rtwdev, REG_9082XS_IQK_RF_MODE_TABLE, 0x00c074cb);
+	else
+		rtw_write_rf(rtwdev, RF_PATH_A, RF_MODE, RFREG_MASK, 0x32ed3);
+	rtw8188e_iqk_write32(rtwdev, REG_TXIQK_TONE_A_11N, 0x01008c00);
+	rtw8188e_iqk_write32(rtwdev, REG_RXIQK_TONE_A_11N, 0x01008c00);
 }
 
 static bool rtw8188e_iqk_similarity_cmp(s32 result[][IQK_NR], u8 c1, u8 c2)
@@ -2038,19 +2145,27 @@ static void rtw8188e_iqk_fill_matrix(struct rtw_dev *rtwdev, const s32 result[])
 	scale = rtw_read32_mask(rtwdev, REG_OFDM_0_XA_TX_IQ_IMBALANCE, GENMASK(31, 22));
 	a = (x * scale) >> 8;
 	c = (y * scale) >> 8;
+	/* 9082XS uses direct BB access for C80/C94, but its masked BB
+	 * accessor for C4C, C14 and CA0.
+	 */
 	rtw_write32_mask(rtwdev, REG_OFDM_0_XA_TX_IQ_IMBALANCE, GENMASK(9, 0), a & 0x3ff);
-	rtw_write32_mask(rtwdev, REG_OFDM_0_ECCA_THRESHOLD, BIT(31), (x * scale >> 7) & 1);
+	rtw8188e_iqk_write32_mask(rtwdev, REG_OFDM_0_ECCA_THRESHOLD,
+				  BIT(31), (x * scale >> 7) & 1);
 	rtw_write32_mask(rtwdev, REG_TXIQK_MATRIXA_LSB2_11N, GENMASK(31, 28), (c >> 6) & 0xf);
 	rtw_write32_mask(rtwdev, REG_OFDM_0_XA_TX_IQ_IMBALANCE, GENMASK(21, 16), c & 0x3f);
-	rtw_write32_mask(rtwdev, REG_OFDM_0_ECCA_THRESHOLD, BIT(29), (y * scale >> 7) & 1);
+	rtw8188e_iqk_write32_mask(rtwdev, REG_OFDM_0_ECCA_THRESHOLD,
+				  BIT(29), (y * scale >> 7) & 1);
 
 	if (!result[IQK_RX_X])
 		return;
 
-	rtw_write32_mask(rtwdev, REG_A_RXIQI, GENMASK(9, 0), result[IQK_RX_X]);
-	rtw_write32_mask(rtwdev, REG_A_RXIQI, GENMASK(15, 10), result[IQK_RX_Y] & 0x3f);
-	rtw_write32_mask(rtwdev, REG_RXIQK_MATRIX_LSB_11N, GENMASK(31, 28),
-			 (result[IQK_RX_Y] >> 6) & 0xf);
+	rtw8188e_iqk_write32_mask(rtwdev, REG_A_RXIQI, GENMASK(9, 0),
+				  result[IQK_RX_X]);
+	rtw8188e_iqk_write32_mask(rtwdev, REG_A_RXIQI, GENMASK(15, 10),
+				  result[IQK_RX_Y] & 0x3f);
+	rtw8188e_iqk_write32_mask(rtwdev, REG_RXIQK_MATRIX_LSB_11N,
+				  GENMASK(31, 28),
+				  (result[IQK_RX_Y] >> 6) & 0xf);
 }
 
 static void
@@ -2060,31 +2175,40 @@ rtw8188e_iqk_one_round(struct rtw_dev *rtwdev, s32 result[IQK_NR], int round,
 	int i, retry;
 
 	for (i = 0; i < RTW8188E_IQK_ADDA_REG_NUM; i++)
-		rtw_write32(rtwdev, rtw8188e_iqk_adda_regs[i],
-			    i ? 0x0bdb25a0 : 0x0b1b25a0);
+		rtw8188e_iqk_write32(rtwdev, rtw8188e_iqk_adda_regs[i],
+				     i ? 0x0bdb25a0 : 0x0b1b25a0);
 	if (!pi_enabled) {
-		rtw_write32(rtwdev, REG_FPGA0_XA_HSSI_PARM1, 0x01000100);
-		rtw_write32(rtwdev, REG_FPGA0_XB_HSSI_PARM1, 0x01000100);
+		rtw8188e_iqk_write32(rtwdev, REG_FPGA0_XA_HSSI_PARM1,
+				     0x01000100);
+		rtw8188e_iqk_write32(rtwdev, REG_FPGA0_XB_HSSI_PARM1,
+				     0x01000100);
 	}
-	rtw_write8(rtwdev, REG_TXPAUSE, 0x3f);
+	rtw_write8(rtwdev, REG_TXPAUSE,
+		   rtwdev->chip->efuse_id == 0x9082 ? 0xfc : 0x3f);
 	rtw_write8(rtwdev, REG_BCN_CTRL, backup->mac8[1] & ~BIT(3));
 	rtw_write8(rtwdev, REG_BCN_CTRL + 1, backup->mac8[2] & ~BIT(3));
 	rtw_write8(rtwdev, REG_GPIO_MUXCFG, backup->mac32[0] & ~BIT(5));
-	rtw_write32_mask(rtwdev, REG_CCK_ANT_SEL_11N, GENMASK(27, 24), 0xf);
-	rtw_write32(rtwdev, REG_BB_RX_PATH_11N, 0x03a05600);
-	rtw_write32(rtwdev, REG_TRMUX_11N, 0x000800e4);
-	rtw_write32(rtwdev, REG_BB_PWR_SAV1_11N, 0x22204000);
-	rtw_write32_set(rtwdev, REG_FPGA0_XA_RF_SW_CTRL, BIT(10) | BIT(26));
-	rtw_write32_clr(rtwdev, REG_FPGA0_XA_RF_INT_OE, BIT(10));
-	rtw_write32_clr(rtwdev, REG_FPGA0_XB_RF_INT_OE, BIT(10));
-	rtw_write32(rtwdev, REG_CONFIG_ANT_A_11N, 0x0f600000);
-	rtw_write32_mask(rtwdev, REG_FPGA0_IQK_11N, BIT_MASK_IQK_MODE, 0x808000);
-	rtw_write32(rtwdev, REG_TXIQK_11N, 0x01007c00);
-	rtw_write32(rtwdev, REG_RXIQK_11N, 0x81004800);
+	rtw8188e_iqk_write32_mask(rtwdev, REG_CCK_ANT_SEL_11N,
+				  GENMASK(27, 24), 0xf);
+	rtw8188e_iqk_write32(rtwdev, REG_BB_RX_PATH_11N, 0x03a05600);
+	rtw8188e_iqk_write32(rtwdev, REG_TRMUX_11N, 0x000800e4);
+	rtw8188e_iqk_write32(rtwdev, REG_BB_PWR_SAV1_11N, 0x22204000);
+	rtw8188e_iqk_write32_set(rtwdev, REG_FPGA0_XA_RF_SW_CTRL,
+				 BIT(10) | BIT(26));
+	rtw8188e_iqk_write32_clr(rtwdev, REG_FPGA0_XA_RF_INT_OE,
+				 BIT(10));
+	rtw8188e_iqk_write32_clr(rtwdev, REG_FPGA0_XB_RF_INT_OE,
+				 BIT(10));
+	rtw8188e_iqk_write32(rtwdev, REG_CONFIG_ANT_A_11N, 0x0f600000);
+	rtw8188e_iqk_write32_mask(rtwdev, REG_FPGA0_IQK_11N,
+				  BIT_MASK_IQK_MODE, 0x808000);
+	rtw8188e_iqk_write32(rtwdev, REG_TXIQK_11N, 0x01007c00);
+	rtw8188e_iqk_write32(rtwdev, REG_RXIQK_11N, 0x81004800);
 
-	/* Use the neutral matrix for a phase if both attempts fail. */
+	/* Use neutral TX fallback; keep the 9082XS RX matrix on RX failure. */
 	result[IQK_TX_X] = IQK_COEFF_UNITY;
-	result[IQK_RX_X] = IQK_COEFF_UNITY;
+	result[IQK_RX_X] = rtwdev->chip->efuse_id == 0x9082 ? 0 :
+							 IQK_COEFF_UNITY;
 
 	for (retry = 0; retry < PATH_IQK_RETRY; retry++) {
 		rtw_dbg(rtwdev, RTW_DBG_RFK, "IQK round %d TX attempt %d\n",
@@ -2093,8 +2217,8 @@ rtw8188e_iqk_one_round(struct rtw_dev *rtwdev, s32 result[IQK_NR], int round,
 			continue;
 		result[IQK_TX_X] = rtw_read32_mask(rtwdev,
 						   REG_IQK_RES_TX, BIT_MASK_IQK_RESULT);
-		result[IQK_TX_Y] = rtw_read32_mask(rtwdev,
-						   REG_IQK_RES_TY, BIT_MASK_IQK_RESULT);
+		result[IQK_TX_Y] = u32_get_bits(rtw8188e_iqk_read_y(rtwdev),
+						  BIT_MASK_IQK_RESULT);
 		break;
 	}
 	for (retry = 0; retry < PATH_IQK_RETRY; retry++) {
@@ -2111,7 +2235,8 @@ rtw8188e_iqk_one_round(struct rtw_dev *rtwdev, s32 result[IQK_NR], int round,
 	rtw_dbg(rtwdev, RTW_DBG_RFK, "IQK round %d: TX %x %x RX %x %x\n",
 		round, result[IQK_TX_X], result[IQK_TX_Y],
 		result[IQK_RX_X], result[IQK_RX_Y]);
-	rtw_write32_mask(rtwdev, REG_FPGA0_IQK_11N, BIT_MASK_IQK_MODE, 0);
+	rtw8188e_iqk_write32_mask(rtwdev, REG_FPGA0_IQK_11N,
+				  BIT_MASK_IQK_MODE, 0);
 }
 
 static void rtw8188e_phy_calibration(struct rtw_dev *rtwdev)
