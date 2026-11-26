@@ -231,6 +231,46 @@ static const struct rtw_pwr_seq_cmd * const card_enable_flow_8188e[] = {
 	NULL
 };
 
+/* 9082XS uses the RTL8188E register layout with reversed control bits. */
+static const struct rtw_pwr_seq_cmd card_enable_9082xs[] = {
+	{0x001c, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_WRITE, 0xff, 0},
+	{0x0086, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_SDIO, RTW_PWR_CMD_WRITE, BIT(3), 0},
+	{0x0086, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_SDIO, RTW_PWR_CMD_POLLING, BIT(2), BIT(2)},
+	{0x0005, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_WRITE, BIT(3) | BIT(4), 0},
+	{0x0006, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_POLLING, BIT(6), BIT(6)},
+	{0x0002, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_WRITE, BIT(6) | BIT(7), 0},
+	{0x0026, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_WRITE, BIT(0), BIT(0)},
+	{0x0005, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_WRITE, BIT(0), 0},
+	{0x0005, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_WRITE, BIT(3) | BIT(4), 0},
+	{0x0005, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_WRITE, BIT(7), BIT(7)},
+	{0x0005, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_POLLING, BIT(7), 0},
+	{0x0023, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_WRITE, BIT(3), 0},
+	{0x0004, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_WRITE, BIT(3), BIT(3)},
+	{0x0100, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_WRITE, 0xfc, 0xfc},
+	{0x0101, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_WRITE, 0x60, 0x60},
+	{ .cmd = RTW_PWR_CMD_END },
+};
+
+static const struct rtw_pwr_seq_cmd * const card_enable_flow_9082xs[] = {
+	card_enable_9082xs,
+	NULL,
+};
+
 static const struct rtw_pwr_seq_cmd * const card_disable_flow_8188e[] = {
 	trans_act_to_lps_8188e,
 	trans_act_to_reset_mcu_8188e,
@@ -2873,7 +2913,7 @@ const struct rtw_chip_info rtw9082xs_hw_spec = {
 	.dig_min = 0x20,
 	.ht_supported = true,
 	.lps_deep_mode_supported = 0,
-	.pwr_on_seq = card_enable_flow_8188e,
+	.pwr_on_seq = card_enable_flow_9082xs,
 	.pwr_off_seq = card_disable_flow_8188e,
 	.page_table = page_table_8188e,
 	.rqpn_table = rqpn_table_8188e,
