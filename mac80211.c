@@ -351,7 +351,10 @@ static void rtw_ops_configure_filter(struct ieee80211_hw *hw,
 		changed_flags, *new_flags, rtwdev->hal.rcr);
 
 	if (write_hw)
-		rtw_write32(rtwdev, REG_RCR, rtwdev->hal.rcr);
+		rtw_write32(rtwdev, REG_RCR,
+			    rtwdev->chip->efuse_id == 0x9082 &&
+			    test_bit(RTW_FLAG_SCANNING, rtwdev->flags) ?
+			    rtwdev->hal.rcr & ~BIT_AAP : rtwdev->hal.rcr);
 
 	mutex_unlock(&rtwdev->mutex);
 }

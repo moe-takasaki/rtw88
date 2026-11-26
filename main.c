@@ -1595,6 +1595,10 @@ void rtw_core_scan_start(struct rtw_dev *rtwdev, struct rtw_vif *rtwvif,
 
 	set_bit(RTW_FLAG_DIG_DISABLE, rtwdev->flags);
 	set_bit(RTW_FLAG_SCANNING, rtwdev->flags);
+	/* The 9082XS vendor survey transition clears RCR bit 0. */
+	if (rtwdev->chip->efuse_id == 0x9082 &&
+	    test_bit(RTW_FLAG_POWERON, rtwdev->flags))
+		rtw_write32(rtwdev, REG_RCR, rtwdev->hal.rcr & ~BIT_AAP);
 
 	rtw_phy_dig_set_max_coverage(rtwdev);
 }
@@ -1611,6 +1615,9 @@ void rtw_core_scan_complete(struct rtw_dev *rtwdev, struct ieee80211_vif *vif,
 	rtw_phy_dig_reset(rtwdev);
 	clear_bit(RTW_FLAG_SCANNING, rtwdev->flags);
 	clear_bit(RTW_FLAG_DIG_DISABLE, rtwdev->flags);
+	if (rtwdev->chip->efuse_id == 0x9082 &&
+	    test_bit(RTW_FLAG_POWERON, rtwdev->flags))
+		rtw_write32(rtwdev, REG_RCR, rtwdev->hal.rcr);
 
 	rtw_core_fw_scan_notify(rtwdev, false);
 
