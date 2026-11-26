@@ -7,6 +7,7 @@
 
 #include <linux/netdevice.h>
 #include <linux/slab.h>
+#include <linux/bitrev.h>
 
 #include "main.h"
 #include "debug.h"
@@ -2136,6 +2137,49 @@ static int rtw8188e_read_efuse(struct rtw_dev *rtwdev, u8 *log_map)
 	return 0;
 }
 
+static int rtw9082xs_dump_physical_efuse_map(struct rtw_dev *rtwdev, u8 *map)
+{
+	u32 size = rtwdev->efuse.physical_size;
+	u32 limit = size - rtwdev->efuse.protect_size;
+	u16 value;
+	u8 control, status;
+	u32 addr;
+	int poll, ret = 0;
+
+	memset(map, 0xff, size);
+	rtw_write8(rtwdev, REG_EFUSE_ACCESS, 0x96);
+	value = rtw_read16(rtwdev, REG_SYS_FUNC_EN);
+	rtw_write16(rtwdev, REG_SYS_FUNC_EN, value | 0x0800);
+	value = rtw_read16(rtwdev, REG_SYS_CLKR);
+	rtw_write16(rtwdev, REG_SYS_CLKR, value | 0x0044);
+
+	for (addr = 0; addr < limit; addr++) {
+		rtw_write8(rtwdev, REG_EFUSE_CTRL + 1, bitrev8(addr));
+		control = rtw_read8(rtwdev, REG_EFUSE_CTRL + 2);
+		rtw_write8(rtwdev, REG_EFUSE_CTRL + 2, control & 0x3f);
+		rtw_write8_clr(rtwdev, REG_EFUSE_CTRL + 3, BIT(0));
+		for (poll = 0; poll < 2000; poll++) {
+			status = rtw_read8(rtwdev, REG_EFUSE_CTRL + 3);
+			if (status & BIT(0))
+				break;
+			udelay(5);
+		}
+		if (poll == 2000) {
+			rtw_err(rtwdev, "9082XS eFuse byte %#x timed out\n",
+				addr);
+			ret = -ETIMEDOUT;
+			break;
+		}
+		udelay(50);
+		map[addr] = rtw_read8(rtwdev, REG_EFUSE_CTRL);
+		if (map[addr] == 0xff)
+			break;
+	}
+
+	rtw_write8(rtwdev, REG_EFUSE_ACCESS, 0);
+	return ret;
+}
+
 /* Realtek's T-series host RA, driven by the hardware's TX Report 2. */
 static const u8 rtw8188e_retry_penalty[][RTW8188E_RA_RETRY_COUNT + 1] = {
 	{ 5,  4,  3,  2, 0,  3},
@@ -2957,6 +3001,8 @@ const struct rtw_chip_info rtw9082xs_hw_spec = {
 	.phy_efuse_size = 256,
 	.log_efuse_size = 512,
 	.ptct_efuse_size = 18,
+	.efuse_id = 0x9082,
+	.dump_physical_efuse_map = rtw9082xs_dump_physical_efuse_map,
 	.txff_size = 22528,
 	.rxff_size = 10240,
 	.rsvd_drv_pg_num = 8,

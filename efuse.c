@@ -3,6 +3,7 @@
  */
 
 #include <linux/iopoll.h>
+#include <linux/unaligned.h>
 
 #include "main.h"
 #include "efuse.h"
@@ -160,7 +161,10 @@ int rtw_parse_efuse_map(struct rtw_dev *rtwdev)
 		goto out_free;
 	}
 
-	ret = rtw_dump_physical_efuse_map(rtwdev, phy_map);
+	if (chip->dump_physical_efuse_map)
+		ret = chip->dump_physical_efuse_map(rtwdev, phy_map);
+	else
+		ret = rtw_dump_physical_efuse_map(rtwdev, phy_map);
 	if (ret) {
 		rtw_err(rtwdev, "failed to dump efuse physical map\n");
 		goto out_free;
@@ -170,6 +174,12 @@ int rtw_parse_efuse_map(struct rtw_dev *rtwdev)
 	ret = rtw_dump_logical_efuse_map(rtwdev, phy_map, log_map);
 	if (ret) {
 		rtw_err(rtwdev, "failed to dump efuse logical map\n");
+		goto out_free;
+	}
+	if (chip->efuse_id && get_unaligned_le16(log_map) != chip->efuse_id) {
+		rtw_err(rtwdev, "unexpected efuse ID %#x\n",
+			get_unaligned_le16(log_map));
+		ret = -EINVAL;
 		goto out_free;
 	}
 

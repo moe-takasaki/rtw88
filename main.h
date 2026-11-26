@@ -1414,6 +1414,8 @@ struct rtw_chip_info {
 	u32 phy_efuse_size;
 	u32 log_efuse_size;
 	u32 ptct_efuse_size;
+	u16 efuse_id;
+	int (*dump_physical_efuse_map)(struct rtw_dev *rtwdev, u8 *map);
 	u32 txff_size;
 	u32 rxff_size;
 	u32 fw_rxff_size;
