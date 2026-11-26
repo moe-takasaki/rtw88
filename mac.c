@@ -3,6 +3,7 @@
  */
 
 #include <linux/unaligned.h>
+#include <linux/bitrev.h>
 
 #include "main.h"
 #include "mac.h"
@@ -1366,6 +1367,14 @@ static int __priority_queue_cfg(struct rtw_dev *rtwdev,
 	return 0;
 }
 
+static u32 rtw9082xs_rqpn_bits(u32 value)
+{
+	return (u32)bitrev8(value) |
+	       ((u32)bitrev8(value >> 8) << 8) |
+	       ((u32)bitrev8(value >> 16) << 16) |
+	       ((u32)bitrev8(value >> 24) << 24);
+}
+
 static int __priority_queue_cfg_legacy(struct rtw_dev *rtwdev,
 				       const struct rtw_page_table *pg_tbl,
 				       u16 pubq_num)
@@ -1375,8 +1384,12 @@ static int __priority_queue_cfg_legacy(struct rtw_dev *rtwdev,
 	u32 val32;
 
 	val32 = BIT_RQPN_NE(pg_tbl->nq_num, pg_tbl->exq_num);
+	if (chip->efuse_id == 0x9082)
+		val32 = rtw9082xs_rqpn_bits(val32);
 	rtw_write32(rtwdev, REG_RQPN_NPQ, val32);
 	val32 = BIT_RQPN_HLP(pg_tbl->hq_num, pg_tbl->lq_num, pubq_num);
+	if (chip->efuse_id == 0x9082)
+		val32 = rtw9082xs_rqpn_bits(val32);
 	rtw_write32(rtwdev, REG_RQPN, val32);
 
 	rtw_write8(rtwdev, REG_TRXFF_BNDY, fifo->rsvd_boundary);

@@ -781,6 +781,8 @@ static int rtw_sdio_check_free_txpg(struct rtw_dev *rtwdev, u8 queue,
 		u32 free_txpg;
 
 		free_txpg = rtw_sdio_read32(rtwdev, REG_SDIO_FREE_TXPG);
+		if (rtwdev->chip->efuse_id == 0x9082)
+			free_txpg = rtw_sdio_9082xs_reverse_nibbles(free_txpg);
 
 		switch (queue) {
 		case RTW_TX_QUEUE_BCN:
@@ -1010,7 +1012,11 @@ static int rtw_sdio_write_port(struct rtw_dev *rtwdev, struct sk_buff *skb,
 	u32 txaddr;
 	int ret;
 
-	if (queue == RTW_TX_QUEUE_MGMT && rtw_is_8189es(rtwdev))
+	/* 9082XS has the 8051-era three-FIFO TX page layout. Management
+	 * frames use the high FIFO; the extra FIFO is not allocated.
+	 */
+	if (queue == RTW_TX_QUEUE_MGMT &&
+	    (rtw_is_8189es(rtwdev) || rtwsdio->is_9082xs))
 		queue = RTW_TX_QUEUE_HI0;
 	txaddr = rtw_sdio_get_tx_addr(rtwdev, skb->len, queue);
 	if (!txaddr)
