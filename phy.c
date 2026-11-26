@@ -665,10 +665,15 @@ static void rtw_phy_rrsr_mask_min_iter(void *data, struct ieee80211_sta *sta)
 static void rtw_phy_rrsr_update(struct rtw_dev *rtwdev)
 {
 	struct rtw_dm_info *dm_info = &rtwdev->dm_info;
+	u32 rrsr;
 
 	dm_info->rrsr_mask_min = RRSR_RATE_ORDER_MAX;
 	rtw_iterate_stas(rtwdev, rtw_phy_rrsr_mask_min_iter, rtwdev);
-	rtw_write32(rtwdev, REG_RRSR, dm_info->rrsr_val_init & dm_info->rrsr_mask_min);
+	rrsr = dm_info->rrsr_val_init & dm_info->rrsr_mask_min;
+	/* 9082XS reverses bits within each RRSR rate-mask byte. */
+	if (rtwdev->chip->efuse_id == 0x9082)
+		rrsr = bitrev8(rrsr) | (u32)bitrev8(rrsr >> 8) << 8;
+	rtw_write32(rtwdev, REG_RRSR, rrsr);
 }
 
 static void rtw_phy_dpk_track(struct rtw_dev *rtwdev)
