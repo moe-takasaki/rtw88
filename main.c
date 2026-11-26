@@ -2068,9 +2068,29 @@ static int rtw_chip_parameter_setup(struct rtw_dev *rtwdev)
 	return 0;
 }
 
-static int rtw_chip_efuse_enable(struct rtw_dev *rtwdev)
+static int rtw_chip_download_firmware(struct rtw_dev *rtwdev)
 {
 	struct rtw_fw_state *fw = &rtwdev->fw;
+	int ret;
+
+	if (rtwdev->chip->efuse_id != 0x9082)
+		rtw_write8(rtwdev, REG_C2HEVT, C2H_HW_FEATURE_DUMP);
+
+	wait_for_completion(&fw->completion);
+	if (!fw->firmware) {
+		rtw_err(rtwdev, "failed to load firmware\n");
+		return -EINVAL;
+	}
+
+	ret = rtw_download_firmware(rtwdev, fw);
+	if (ret)
+		rtw_err(rtwdev, "failed to download firmware\n");
+
+	return ret;
+}
+
+static int rtw_chip_efuse_enable(struct rtw_dev *rtwdev)
+{
 	int ret;
 
 	ret = rtw_hci_setup(rtwdev);
@@ -2085,19 +2105,14 @@ static int rtw_chip_efuse_enable(struct rtw_dev *rtwdev)
 		goto err;
 	}
 
-	rtw_write8(rtwdev, REG_C2HEVT, C2H_HW_FEATURE_DUMP);
+	if (rtwdev->chip->efuse_id == 0x9082)
+		return 0;
 
-	wait_for_completion(&fw->completion);
-	if (!fw->firmware) {
-		ret = -EINVAL;
-		rtw_err(rtwdev, "failed to load firmware\n");
-		goto err;
-	}
-
-	ret = rtw_download_firmware(rtwdev, fw);
+	ret = rtw_chip_download_firmware(rtwdev);
 	if (ret) {
-		rtw_err(rtwdev, "failed to download firmware\n");
-		goto err_off;
+		if (rtwdev->fw.firmware)
+			goto err_off;
+		goto err;
 	}
 
 	return 0;
@@ -2173,6 +2188,12 @@ static int rtw_chip_efuse_info_setup(struct rtw_dev *rtwdev)
 	ret = rtw_parse_efuse_map(rtwdev);
 	if (ret)
 		goto out_disable;
+	/* The 9082XS vendor sequence reads eFuse before starting its MCU. */
+	if (rtwdev->chip->efuse_id == 0x9082) {
+		ret = rtw_chip_download_firmware(rtwdev);
+		if (ret)
+			goto out_disable;
+	}
 
 	ret = rtw_dump_hw_feature(rtwdev);
 	if (ret)
