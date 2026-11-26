@@ -2028,10 +2028,18 @@ static int rtw_chip_parameter_setup(struct rtw_dev *rtwdev)
 		return -EINVAL;
 	}
 
-	hal->chip_version = rtw_read32(rtwdev, REG_SYS_CFG1);
-	hal->cut_version = BIT_GET_CHIP_VER(hal->chip_version);
-	hal->mp_chip = (hal->chip_version & BIT_RTL_ID) ? 0 : 1;
-	if (hal->chip_version & BIT_RF_TYPE_ID) {
+	/* The RTL8188E cut register is not readable before 9082XS power-on. */
+	if (chip->efuse_id == 0x9082) {
+		hal->chip_version = 0;
+		hal->cut_version = 0;
+		hal->mp_chip = 1;
+	} else {
+		hal->chip_version = rtw_read32(rtwdev, REG_SYS_CFG1);
+		hal->cut_version = BIT_GET_CHIP_VER(hal->chip_version);
+		hal->mp_chip = (hal->chip_version & BIT_RTL_ID) ? 0 : 1;
+	}
+	if (chip->efuse_id != 0x9082 &&
+	    (hal->chip_version & BIT_RF_TYPE_ID)) {
 		hal->rf_type = RF_2T2R;
 		hal->rf_path_num = 2;
 		hal->antenna_tx = BB_PATH_AB;
@@ -2252,6 +2260,10 @@ int rtw_chip_info_setup(struct rtw_dev *rtwdev)
 	if (ret) {
 		rtw_err(rtwdev, "failed to setup chip efuse info\n");
 		goto err_out;
+	}
+	if (rtwdev->chip->stop_after_efuse) {
+		rtw_info(rtwdev, "stopped after eFuse for staged bring-up\n");
+		return -EOPNOTSUPP;
 	}
 
 	ret = rtw_chip_board_info_setup(rtwdev);

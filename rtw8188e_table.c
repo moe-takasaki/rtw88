@@ -3,8 +3,6 @@
  * Copyright(c) 2026 Igor Listopad <dev@listopad.email>
  */
 
-#include <linux/bitrev.h>
-
 #include "main.h"
 #include "phy.h"
 #include "rtw8188e_table.h"
@@ -116,21 +114,90 @@ static const u32 rtw8188e_mac[] = {
 
 RTW_DECL_TABLE_PHY_COND(rtw8188e_mac, rtw_phy_cfg_mac);
 
-static void rtw9082xs_cfg_mac(struct rtw_dev *rtwdev,
-			      const struct rtw_table *tbl, u32 addr, u32 data)
-{
-	/* The 9082XS MAC table stores each byte with its bits reversed. */
-	if (addr != 0x458)
-		data = bitrev8(data);
+struct rtw9082xs_mac_reg {
+	u16 addr;
+	u8 width;
+	u32 value;
+};
 
-	rtw_write8(rtwdev, addr, data);
+/* Raw register values and write widths recovered from the 9082XS module. */
+static const struct rtw9082xs_mac_reg rtw9082xs_mac[] = {
+	{ 0x026, 2, 0x0000ac82 },
+	{ 0x040, 1, 0x00000000 },
+	{ 0x380, 4, 0x0000e500 },
+	{ 0x384, 4, 0x0f200100 },
+	{ 0x3e0, 4, 0x103c0107 },
+	{ 0x421, 1, 0x000000f0 },
+	{ 0x428, 2, 0x00000850 },
+	{ 0x430, 4, 0x20408000 },
+	{ 0x434, 4, 0x10e060a0 },
+	{ 0x438, 4, 0x40800000 },
+	{ 0x43c, 4, 0xe060a020 },
+	{ 0x440, 2, 0x000080ba },
+	{ 0x442, 1, 0x00000000 },
+	{ 0x444, 4, 0x00f00fa8 },
+	{ 0x458, 4, 0x9d4e1541 },
+	{ 0x460, 2, 0x00006666 },
+	{ 0x468, 4, 0x20106666 },
+	{ 0x46c, 4, 0x2018cccc },
+	{ 0x470, 4, 0x0070ac52 },
+	{ 0x478, 4, 0x00000020 },
+	{ 0x480, 1, 0x00000010 },
+	{ 0x4c8, 2, 0x000010ff },
+	{ 0x4cc, 2, 0x0000ffff },
+	{ 0x4ce, 1, 0x00000080 },
+	{ 0x4d3, 1, 0x00000080 },
+	{ 0x500, 4, 0x00f44564 },
+	{ 0x504, 4, 0x007ac514 },
+	{ 0x508, 4, 0x007a25d4 },
+	{ 0x50c, 4, 0x000025f2 },
+	{ 0x512, 1, 0x00000038 },
+	{ 0x514, 1, 0x00000050 },
+	{ 0x516, 1, 0x00000050 },
+	{ 0x525, 1, 0x000000f2 },
+	{ 0x550, 2, 0x00000808 },
+	{ 0x559, 1, 0x00000040 },
+	{ 0x55d, 1, 0x000000ff },
+	{ 0x605, 1, 0x0000000c },
+	{ 0x608, 2, 0x00005470 },
+	{ 0x620, 4, 0xffffffff },
+	{ 0x624, 4, 0xffffffff },
+	{ 0x63c, 4, 0x30301010 },
+	{ 0x640, 1, 0x00000002 },
+	{ 0x652, 1, 0x00000004 },
+	{ 0x66e, 1, 0x000000a0 },
+	{ 0x700, 4, 0xe1a6c284 },
+	{ 0x708, 4, 0xe1a6c284 },
+	{ 0x7bc, 4, 0x00203030 },
+	{ 0x7c0, 4, 0x00008240 },
+	{ 0x7c8, 4, 0xe01200f0 },
+};
+
+static void rtw9082xs_parse_mac(struct rtw_dev *rtwdev,
+				const struct rtw_table *tbl)
+{
+	const struct rtw9082xs_mac_reg *regs = tbl->data;
+	u32 i;
+
+	for (i = 0; i < tbl->size; i++) {
+		switch (regs[i].width) {
+		case 1:
+			rtw_write8(rtwdev, regs[i].addr, regs[i].value);
+			break;
+		case 2:
+			rtw_write16(rtwdev, regs[i].addr, regs[i].value);
+			break;
+		case 4:
+			rtw_write32(rtwdev, regs[i].addr, regs[i].value);
+			break;
+		}
+	}
 }
 
 const struct rtw_table rtw9082xs_mac_tbl = {
-	.data = rtw8188e_mac,
-	.size = ARRAY_SIZE(rtw8188e_mac),
-	.parse = rtw_parse_tbl_phy_cond,
-	.do_cfg = rtw9082xs_cfg_mac,
+	.data = rtw9082xs_mac,
+	.size = ARRAY_SIZE(rtw9082xs_mac),
+	.parse = rtw9082xs_parse_mac,
 };
 
 static const u32 rtw8188e_agc[] = {

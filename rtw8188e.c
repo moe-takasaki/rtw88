@@ -2104,6 +2104,9 @@ static int rtw8188e_read_efuse(struct rtw_dev *rtwdev, u8 *log_map)
 	efuse->thermal_meter_k = thermal;
 	efuse->afe = map->afe;
 	ether_addr_copy(efuse->addr, map->mac_addr);
+	if (rtwdev->chip->efuse_id == 0x9082)
+		rtw_info(rtwdev, "9082XS logical eFuse MAC %pM\n",
+			 map->mac_addr);
 
 	efuse->txpwr_idx_table[RF_PATH_A].pwr_idx_2g = map->txpwr_idx;
 	if (!memchr_inv(pwr, 0xff, sizeof(default_txpwr_idx)))
@@ -2172,8 +2175,6 @@ static int rtw9082xs_dump_physical_efuse_map(struct rtw_dev *rtwdev, u8 *map)
 		}
 		udelay(50);
 		map[addr] = rtw_read8(rtwdev, REG_EFUSE_CTRL);
-		if (map[addr] == 0xff)
-			break;
 	}
 
 	rtw_write8(rtwdev, REG_EFUSE_ACCESS, 0);
@@ -2995,6 +2996,7 @@ const struct rtw_chip_info rtw9082xs_hw_spec = {
 	.id = RTW_CHIP_TYPE_8188E,
 	.fw_name = "tilk/9082xs-nic.bin",
 	.raw_legacy_fw = true,
+	.stop_after_efuse = true,
 	.wlan_cpu = RTW_WCPU_8051,
 	.tx_pkt_desc_sz = 32,
 	.rx_pkt_desc_sz = 24,
@@ -3027,9 +3029,9 @@ const struct rtw_chip_info rtw9082xs_hw_spec = {
 	.rf_sipi_read_addr = rtw8188e_rf_sipi_addr,
 	.fix_rf_phy_num = 1,
 	.mac_tbl = &rtw9082xs_mac_tbl,
-	.agc_tbl = &rtw8188e_agc_tbl,
+	.agc_tbl = &rtw9082xs_agc_tbl,
 	.bb_tbl = &rtw8188e_bb_tbl,
-	.rf_tbl = {&rtw8188e_rf_a_tbl},
+	.rf_tbl = {&rtw9082xs_rf_tbl},
 	.rfe_defs = rtw8188e_rfe_defs,
 	.rfe_defs_size = ARRAY_SIZE(rtw8188e_rfe_defs),
 	.iqk_threshold = 8,
