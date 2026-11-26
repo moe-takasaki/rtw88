@@ -725,6 +725,13 @@ static void rtw8188e_set_tx_power_index_by_rate(struct rtw_dev *rtwdev,
 			continue;
 		}
 
+		/* The vendor TXAGC path reverses each byte for CCK, 24-54M and
+		 * MCS rates, but uses direct BB access for 6-18M.
+		 */
+		if (rtwdev->chip->efuse_id == 0x9082 &&
+		    (rate < DESC_RATE6M || rate > DESC_RATE18M))
+			pwr_index = bitrev8(pwr_index);
+
 		rtw_write32_mask(rtwdev, txagc->addr, txagc->mask, pwr_index);
 	}
 }
