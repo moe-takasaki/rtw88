@@ -1830,6 +1830,7 @@ static void rtw8188e_query_phy_status(struct rtw_dev *rtwdev, u8 *phy_status,
 
 static void rtw8188e_lck(struct rtw_dev *rtwdev)
 {
+	struct rtw8188e_priv *priv = rtwdev->chip_priv;
 	u32 rf18, lc_cal;
 	u8 val_ctx, rf_val, tx_pause;
 	int ret;
@@ -1840,9 +1841,16 @@ static void rtw8188e_lck(struct rtw_dev *rtwdev)
 		rtw_write8(rtwdev, REG_CTX, val_ctx & ~BIT_MASK_CTX_TYPE);
 	else
 		rtw_write8(rtwdev, REG_TXPAUSE, 0xff);
-	rf18 = rtw_read_rf(rtwdev, RF_PATH_A, RF_CFGCH, RFREG_MASK);
-	/* LCK uses the low 12 bits of the channel configuration. */
-	lc_cal = rf18 & GENMASK(11, 0);
+	if (rtwdev->chip->efuse_id == 0x9082) {
+		/* The 9082XS channel path caches RF18 because serial readback is
+		 * unreliable. Keep its upper channel bits through LC calibration.
+		 */
+		rf18 = priv->rf18;
+		lc_cal = rf18;
+	} else {
+		rf18 = rtw_read_rf(rtwdev, RF_PATH_A, RF_CFGCH, RFREG_MASK);
+		lc_cal = rf18 & GENMASK(11, 0);
+	}
 	rtw_dbg(rtwdev, RTW_DBG_RFK, "LCK start: ctx=%02x rf18=%05x cal=%03x\n",
 		val_ctx, rf18, lc_cal);
 	rtw_write_rf(rtwdev, RF_PATH_A, RF_CFGCH, RFREG_MASK, lc_cal | BIT_LCK);
