@@ -167,6 +167,7 @@ struct rtw_sdio_work_data {
 struct rtw_sdio {
 	struct sdio_func *sdio_func;
 	bool is_9082xs;
+	atomic_t io_error;
 
 	u32 irq_mask;
 	bool irq_claimed;

@@ -1478,6 +1478,8 @@ int rtw_power_on(struct rtw_dev *rtwdev)
 	bool wifi_only;
 	int ret;
 
+	rtw_hci_clear_io_error(rtwdev);
+
 	ret = rtw_hci_setup(rtwdev);
 	if (ret) {
 		rtw_err(rtwdev, "failed to setup hci\n");
@@ -1511,10 +1513,20 @@ int rtw_power_on(struct rtw_dev *rtwdev)
 	}
 
 	chip->ops->phy_set_param(rtwdev);
+	ret = rtw_hci_get_io_error(rtwdev);
+	if (ret) {
+		rtw_err(rtwdev, "register setup failed: %d\n", ret);
+		goto err_off;
+	}
 
 	ret = rtw_mac_postinit(rtwdev);
 	if (ret) {
 		rtw_err(rtwdev, "failed to configure mac in postinit\n");
+		goto err_off;
+	}
+	ret = rtw_hci_get_io_error(rtwdev);
+	if (ret) {
+		rtw_err(rtwdev, "MAC postinit register access failed: %d\n", ret);
 		goto err_off;
 	}
 
@@ -2194,6 +2206,11 @@ static int rtw_chip_efuse_info_setup(struct rtw_dev *rtwdev)
 		if (ret)
 			goto out_disable;
 	}
+	if (rtwdev->chip->stage_radio_tables) {
+		ret = rtwdev->chip->stage_radio_tables(rtwdev);
+		if (ret)
+			goto out_disable;
+	}
 
 	ret = rtw_dump_hw_feature(rtwdev);
 	if (ret)
@@ -2282,8 +2299,15 @@ int rtw_chip_info_setup(struct rtw_dev *rtwdev)
 		rtw_err(rtwdev, "failed to setup chip efuse info\n");
 		goto err_out;
 	}
+	ret = rtw_hci_get_io_error(rtwdev);
+	if (ret) {
+		rtw_err(rtwdev, "register access during eFuse setup failed: %d\n",
+			ret);
+		goto err_out;
+	}
 	if (rtwdev->chip->stop_after_efuse) {
-		rtw_info(rtwdev, "stopped after eFuse for staged bring-up\n");
+		rtw_info(rtwdev,
+			 "stopped before interface registration for staged bring-up\n");
 		return -EOPNOTSUPP;
 	}
 

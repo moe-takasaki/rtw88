@@ -180,6 +180,8 @@ static void rtw9082xs_parse_mac(struct rtw_dev *rtwdev,
 	u32 i;
 
 	for (i = 0; i < tbl->size; i++) {
+		if (rtw_hci_get_io_error(rtwdev))
+			return;
 		switch (regs[i].width) {
 		case 1:
 			rtw_write8(rtwdev, regs[i].addr, regs[i].value);

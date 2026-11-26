@@ -24,6 +24,55 @@
 #include "tx.h"
 
 #define TBTT_PROHIBIT_SETUP_TIME		0x04
+
+static bool s9082c_stage_radio_tables;
+module_param(s9082c_stage_radio_tables, bool, 0600);
+MODULE_PARM_DESC(s9082c_stage_radio_tables,
+		 "Replay 9082XS MAC/PHY/AGC/RF tables before staged probe stops");
+
+static int rtw9082xs_stage_table(struct rtw_dev *rtwdev,
+				const struct rtw_table *table,
+				const char *name)
+{
+	int ret;
+
+	rtw_load_table(rtwdev, table);
+	ret = rtw_hci_get_io_error(rtwdev);
+	if (ret)
+		rtw_err(rtwdev, "9082XS %s table failed: %d\n", name, ret);
+
+	return ret;
+}
+
+static int rtw9082xs_stage_radio_tables(struct rtw_dev *rtwdev)
+{
+	int ret;
+
+	if (!s9082c_stage_radio_tables)
+		return 0;
+
+	rtw_info(rtwdev, "replaying 9082XS MAC/PHY/AGC/RF tables\n");
+	ret = rtw9082xs_stage_table(rtwdev, rtwdev->chip->mac_tbl, "MAC");
+	if (ret)
+		return ret;
+	rtw_write16(rtwdev, 0x44ca, 0xe0e0);
+	ret = rtw_hci_get_io_error(rtwdev);
+	if (ret)
+		return ret;
+	ret = rtw9082xs_stage_table(rtwdev, rtwdev->chip->bb_tbl, "PHY");
+	if (ret)
+		return ret;
+	ret = rtw9082xs_stage_table(rtwdev, rtwdev->chip->agc_tbl, "AGC");
+	if (ret)
+		return ret;
+	ret = rtw9082xs_stage_table(rtwdev, rtwdev->chip->rf_tbl[RF_PATH_A],
+				    "RF");
+	if (ret)
+		return ret;
+	rtw_info(rtwdev, "9082XS MAC/PHY/AGC/RF tables completed\n");
+
+	return 0;
+}
 #define TBTT_PROHIBIT_HOLD_TIME_STOP_BCN	0x64
 #define WLAN_BCN_DMA_TIME			0x02
 #define WLAN_BAR_VAL				0x0201ffff
@@ -1414,6 +1463,8 @@ static void rtw8188e_phy_load_bb_tables(struct rtw_dev *rtwdev)
 	u8 xtal_cap = rtwdev->efuse.crystal_cap & 0x3f;
 
 	rtw_load_table(rtwdev, chip->bb_tbl);
+	if (rtw_hci_get_io_error(rtwdev))
+		return;
 	rtw_load_table(rtwdev, chip->agc_tbl);
 	rtw_write32_mask(rtwdev, REG_AFE_CTRL1, GENMASK(22, 11),
 			 xtal_cap | (xtal_cap << 6));
@@ -1432,6 +1483,8 @@ static void rtw8188e_phy_rf6052_config(struct rtw_dev *rtwdev)
 			HSSI_3WIRE_ADDR_LEN | HSSI_3WIRE_DATA_LEN);
 	udelay(1);
 	rtw_load_table(rtwdev, rtwdev->chip->rf_tbl[RF_PATH_A]);
+	if (rtw_hci_get_io_error(rtwdev))
+		return;
 	rtw_write32_mask(rtwdev, REG_FPGA0_XA_RF_SW_CTRL, RFSI_RFENV, val32);
 }
 
@@ -1586,9 +1639,17 @@ static void rtw8188e_phy_set_param(struct rtw_dev *rtwdev)
 	const struct rtw_chip_info *chip = rtwdev->chip;
 
 	rtw_load_table(rtwdev, chip->mac_tbl);
+	if (rtw_hci_get_io_error(rtwdev))
+		return;
 	rtw8188e_phy_bb_config(rtwdev);
+	if (rtw_hci_get_io_error(rtwdev))
+		return;
 	rtw8188e_phy_load_bb_tables(rtwdev);
+	if (rtw_hci_get_io_error(rtwdev))
+		return;
 	rtw8188e_phy_rf6052_config(rtwdev);
+	if (rtw_hci_get_io_error(rtwdev))
+		return;
 
 	rtw_write32_set(rtwdev, REG_FPGA0_RFMOD, BIT_CCKEN | BIT_OFDMEN);
 
@@ -3034,6 +3095,7 @@ const struct rtw_chip_info rtw9082xs_hw_spec = {
 	.fw_name = "tilk/9082xs-nic.bin",
 	.raw_legacy_fw = true,
 	.stop_after_efuse = true,
+	.stage_radio_tables = rtw9082xs_stage_radio_tables,
 	.power_off_chip = rtw9082xs_mac_power_off,
 	.wlan_cpu = RTW_WCPU_8051,
 	.tx_pkt_desc_sz = 32,

@@ -324,6 +324,8 @@ static void rtw9082xs_parse_phy(struct rtw_dev *rtwdev,
 	u32 i;
 
 	for (i = 0; i < tbl->size; i++) {
+		if (rtw_hci_get_io_error(rtwdev))
+			return;
 		if (regs[i].op == RTW9082XS_WRITE) {
 			rtw_write32(rtwdev, regs[i].addr, regs[i].value);
 		} else {

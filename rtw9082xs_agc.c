@@ -151,6 +151,8 @@ static void rtw9082xs_parse_agc(struct rtw_dev *rtwdev,
 	u32 i;
 
 	for (i = 0; i < tbl->size; i++) {
+		if (rtw_hci_get_io_error(rtwdev))
+			return;
 		rtw_write32(rtwdev, regs[i].addr, regs[i].value);
 		udelay(1);
 	}

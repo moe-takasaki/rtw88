@@ -282,6 +282,26 @@ static u32 rtw_sdio_indirect_read32(struct rtw_dev *rtwdev, u32 addr,
 	return rtw_sdio_readl(rtwdev, reg_data, err_ret);
 }
 
+static void rtw_sdio_record_io_error(struct rtw_sdio *rtwsdio, int ret)
+{
+	if (ret && rtwsdio->is_9082xs)
+		atomic_cmpxchg(&rtwsdio->io_error, 0, ret);
+}
+
+static void rtw_sdio_clear_io_error(struct rtw_dev *rtwdev)
+{
+	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
+
+	atomic_set(&rtwsdio->io_error, 0);
+}
+
+static int rtw_sdio_get_io_error(struct rtw_dev *rtwdev)
+{
+	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
+
+	return atomic_read(&rtwsdio->io_error);
+}
+
 static u8 rtw_sdio_read8(struct rtw_dev *rtwdev, u32 addr)
 {
 	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
@@ -304,8 +324,10 @@ static u8 rtw_sdio_read8(struct rtw_dev *rtwdev, u32 addr)
 	if (bus_claim)
 		sdio_release_host(rtwsdio->sdio_func);
 
-	if (ret)
+	if (ret) {
+		rtw_sdio_record_io_error(rtwsdio, ret);
 		rtw_warn(rtwdev, "sdio read8 failed (0x%x): %d", addr, ret);
+	}
 
 	return val;
 }
@@ -332,8 +354,10 @@ static u16 rtw_sdio_read16(struct rtw_dev *rtwdev, u32 addr)
 	if (bus_claim)
 		sdio_release_host(rtwsdio->sdio_func);
 
-	if (ret)
+	if (ret) {
+		rtw_sdio_record_io_error(rtwsdio, ret);
 		rtw_warn(rtwdev, "sdio read16 failed (0x%x): %d", addr, ret);
+	}
 
 	return val;
 }
@@ -360,8 +384,10 @@ static u32 rtw_sdio_read32(struct rtw_dev *rtwdev, u32 addr)
 	if (bus_claim)
 		sdio_release_host(rtwsdio->sdio_func);
 
-	if (ret)
+	if (ret) {
+		rtw_sdio_record_io_error(rtwsdio, ret);
 		rtw_warn(rtwdev, "sdio read32 failed (0x%x): %d", addr, ret);
+	}
 
 	return val;
 }
@@ -442,8 +468,10 @@ static void rtw_sdio_write8(struct rtw_dev *rtwdev, u32 addr, u8 val)
 	if (bus_claim)
 		sdio_release_host(rtwsdio->sdio_func);
 
-	if (ret)
+	if (ret) {
+		rtw_sdio_record_io_error(rtwsdio, ret);
 		rtw_warn(rtwdev, "sdio write8 failed (0x%x): %d", addr, ret);
+	}
 }
 
 static void rtw_sdio_write16(struct rtw_dev *rtwdev, u32 addr, u16 val)
@@ -467,8 +495,10 @@ static void rtw_sdio_write16(struct rtw_dev *rtwdev, u32 addr, u16 val)
 	if (bus_claim)
 		sdio_release_host(rtwsdio->sdio_func);
 
-	if (ret)
+	if (ret) {
+		rtw_sdio_record_io_error(rtwsdio, ret);
 		rtw_warn(rtwdev, "sdio write16 failed (0x%x): %d", addr, ret);
+	}
 }
 
 static void rtw_sdio_write32(struct rtw_dev *rtwdev, u32 addr, u32 val)
@@ -492,8 +522,10 @@ static void rtw_sdio_write32(struct rtw_dev *rtwdev, u32 addr, u32 val)
 	if (bus_claim)
 		sdio_release_host(rtwsdio->sdio_func);
 
-	if (ret)
+	if (ret) {
+		rtw_sdio_record_io_error(rtwsdio, ret);
 		rtw_warn(rtwdev, "sdio write32 failed (0x%x): %d", addr, ret);
+	}
 }
 
 static u32 rtw_sdio_get_tx_addr(struct rtw_dev *rtwdev, size_t size,
@@ -982,6 +1014,8 @@ static int rtw_sdio_write_port(struct rtw_dev *rtwdev, struct sk_buff *skb,
 static void rtw_sdio_init(struct rtw_dev *rtwdev)
 {
 	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
+
+	atomic_set(&rtwsdio->io_error, 0);
 
 	if (rtw_is_8723bs(rtwdev))
 		rtwsdio->irq_mask = REG_SDIO_HIMR_RX_REQUEST;
@@ -1795,6 +1829,8 @@ static const struct rtw_hci_ops rtw_sdio_ops = {
 	.write8 = rtw_sdio_write8,
 	.write16 = rtw_sdio_write16,
 	.write32 = rtw_sdio_write32,
+	.clear_io_error = rtw_sdio_clear_io_error,
+	.get_io_error = rtw_sdio_get_io_error,
 	.write_data_rsvd_page = rtw_sdio_write_data_rsvd_page,
 	.write_data_h2c = rtw_sdio_write_data_h2c,
 };
@@ -2116,7 +2152,8 @@ int rtw_sdio_probe(struct sdio_func *sdio_func,
 
 	ret = rtw_chip_info_setup(rtwdev);
 	if (ret) {
-		rtw_err(rtwdev, "failed to setup chip information");
+		if (ret != -EOPNOTSUPP || !rtwdev->chip->stop_after_efuse)
+			rtw_err(rtwdev, "failed to setup chip information");
 		goto err_destroy_txwq;
 	}
 

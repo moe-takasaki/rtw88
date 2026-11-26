@@ -34,6 +34,8 @@ struct rtw_hci_ops {
 	void (*write8)(struct rtw_dev *rtwdev, u32 addr, u8 val);
 	void (*write16)(struct rtw_dev *rtwdev, u32 addr, u16 val);
 	void (*write32)(struct rtw_dev *rtwdev, u32 addr, u32 val);
+	void (*clear_io_error)(struct rtw_dev *rtwdev);
+	int (*get_io_error)(struct rtw_dev *rtwdev);
 };
 
 static inline int rtw_hci_tx_write(struct rtw_dev *rtwdev,
@@ -149,6 +151,20 @@ static inline void rtw_write16(struct rtw_dev *rtwdev, u32 addr, u16 val)
 static inline void rtw_write32(struct rtw_dev *rtwdev, u32 addr, u32 val)
 {
 	rtwdev->hci.ops->write32(rtwdev, addr, val);
+}
+
+static inline void rtw_hci_clear_io_error(struct rtw_dev *rtwdev)
+{
+	if (rtwdev->hci.ops->clear_io_error)
+		rtwdev->hci.ops->clear_io_error(rtwdev);
+}
+
+static inline int rtw_hci_get_io_error(struct rtw_dev *rtwdev)
+{
+	if (!rtwdev->hci.ops->get_io_error)
+		return 0;
+
+	return rtwdev->hci.ops->get_io_error(rtwdev);
 }
 
 static inline void rtw_write8_set(struct rtw_dev *rtwdev, u32 addr, u8 bit)
