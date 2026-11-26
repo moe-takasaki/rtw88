@@ -982,23 +982,29 @@ static int rtw_sdio_write_port_generic(struct rtw_dev *rtwdev,
 				       size_t write_size)
 {
 	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
-	bool is_8189es = rtw_is_8189es(rtwdev);
+	bool legacy_credits = rtw_is_8189es(rtwdev) || rtwsdio->is_9082xs;
+	u8 oqt_free;
 	int ret;
 
-	if (is_8189es)
+	if (legacy_credits)
 		mutex_lock(&rtwsdio->tx_credit_lock);
 	ret = rtw_sdio_check_free_txpg(rtwdev, queue,
-				       is_8189es ? skb->len : write_size);
+				       legacy_credits ? skb->len : write_size);
 	if (ret)
 		goto out;
-	if (is_8189es && !rtw_read8(rtwdev, REG_SDIO_OQT_FREE_PG_8188E)) {
-		ret = -EBUSY;
-		goto out;
+	if (legacy_credits) {
+		oqt_free = rtw_read8(rtwdev, REG_SDIO_OQT_FREE_PG_8188E);
+		if (rtwsdio->is_9082xs)
+			oqt_free = rtw_sdio_9082xs_reverse_nibbles(oqt_free);
+		if (!oqt_free) {
+			ret = -EBUSY;
+			goto out;
+		}
 	}
 
 	ret = rtw_sdio_write_to_port(rtwdev, skb, queue, txaddr, write_size);
 out:
-	if (is_8189es)
+	if (legacy_credits)
 		mutex_unlock(&rtwsdio->tx_credit_lock);
 	return ret;
 }
@@ -1990,7 +1996,8 @@ static bool rtw_sdio_8723bs_reschedule_tx(struct rtw_dev *rtwdev,
 	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
 	unsigned long delay;
 
-	if (!rtw_is_8723bs(rtwdev) && !rtw_is_8189es(rtwdev))
+	if (!rtw_is_8723bs(rtwdev) && !rtw_is_8189es(rtwdev) &&
+	    !rtwsdio->is_9082xs)
 		return false;
 
 	if (ret == -EBUSY || ret == -ENOMEM)
