@@ -982,17 +982,17 @@ static int rtw_sdio_write_port_generic(struct rtw_dev *rtwdev,
 				       size_t write_size)
 {
 	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
-	bool legacy_credits = rtw_is_8189es(rtwdev) || rtwsdio->is_9082xs;
+	bool is_8189es = rtw_is_8189es(rtwdev);
 	u8 oqt_free;
 	int ret;
 
-	if (legacy_credits)
+	if (is_8189es)
 		mutex_lock(&rtwsdio->tx_credit_lock);
 	ret = rtw_sdio_check_free_txpg(rtwdev, queue,
-				       legacy_credits ? skb->len : write_size);
+				       is_8189es ? skb->len : write_size);
 	if (ret)
 		goto out;
-	if (legacy_credits) {
+	if (is_8189es) {
 		oqt_free = rtw_read8(rtwdev, REG_SDIO_OQT_FREE_PG_8188E);
 		if (rtwsdio->is_9082xs)
 			oqt_free = rtw_sdio_9082xs_reverse_nibbles(oqt_free);
@@ -1004,7 +1004,7 @@ static int rtw_sdio_write_port_generic(struct rtw_dev *rtwdev,
 
 	ret = rtw_sdio_write_to_port(rtwdev, skb, queue, txaddr, write_size);
 out:
-	if (legacy_credits)
+	if (is_8189es)
 		mutex_unlock(&rtwsdio->tx_credit_lock);
 	return ret;
 }
@@ -1018,11 +1018,7 @@ static int rtw_sdio_write_port(struct rtw_dev *rtwdev, struct sk_buff *skb,
 	u32 txaddr;
 	int ret;
 
-	/* 9082XS has the 8051-era three-FIFO TX page layout. Management
-	 * frames use the high FIFO; the extra FIFO is not allocated.
-	 */
-	if (queue == RTW_TX_QUEUE_MGMT &&
-	    (rtw_is_8189es(rtwdev) || rtwsdio->is_9082xs))
+	if (queue == RTW_TX_QUEUE_MGMT && rtw_is_8189es(rtwdev))
 		queue = RTW_TX_QUEUE_HI0;
 	txaddr = rtw_sdio_get_tx_addr(rtwdev, skb->len, queue);
 	if (!txaddr)
@@ -1996,8 +1992,7 @@ static bool rtw_sdio_8723bs_reschedule_tx(struct rtw_dev *rtwdev,
 	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
 	unsigned long delay;
 
-	if (!rtw_is_8723bs(rtwdev) && !rtw_is_8189es(rtwdev) &&
-	    !rtwsdio->is_9082xs)
+	if (!rtw_is_8723bs(rtwdev) && !rtw_is_8189es(rtwdev))
 		return false;
 
 	if (ret == -EBUSY || ret == -ENOMEM)
