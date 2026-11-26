@@ -313,7 +313,8 @@ static void rtw_ops_configure_filter(struct ieee80211_hw *hw,
 	write_hw = rtwdev->chip->efuse_id != 0x9082 ||
 		   test_bit(RTW_FLAG_POWERON, rtwdev->flags);
 	if (rtwdev->chip->efuse_id == 0x9082)
-		rtwdev->hal.rxfltmap1 = *new_flags & FIF_CONTROL ? 0xffff : 0x400;
+		rtwdev->hal.rxfltmap1 =
+			*new_flags & FIF_CONTROL ? 0xffff : 0x2000;
 
 	if (changed_flags & FIF_CONTROL) {
 		if (write_hw)

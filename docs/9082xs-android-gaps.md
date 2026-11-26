@@ -31,13 +31,13 @@ SDIO-local counters use a different nibble conversion. The current driver
 implements these distinctions in the paths that have been traced and tested.
 It also matches the observed Android RCR value `0x0e000673`, RX driver-info
 size `0x20`, RX aggregation timeout `0x60`, TX queue-page allocation, MAC/BSSID
-write widths, management TX descriptor and the main IQK register sequences.
+write widths, management TX descriptor, control-frame filter map and the main
+IQK register sequences.
 
 ## Still different
 
 | Area | Android module | Current `s9082c` branch | Evidence and limit |
 | --- | --- | --- | --- |
-| Control-frame filter | `RXFLTMAP1=0x2000` | Defaults to `0x0400` in `rtw8188e_mac_init()` and `configure_filter()` | A standalone `0x2000` test before the later FCS and address fixes did not establish association. Its effect in the current build is untested. |
 | SIFS and EDCA | Writes four SIFS registers to `0x0850` and four AC queue parameters | No equivalent 9082XS initialization; mac80211 configures ACs later | A four-SIFS-register test alone did not improve association. The full EDCA set was not tested. |
 | Retry and ACK control | `FWHW_TXQ_CTRL` bit 0, `ACKTO=0x02`, init retry limit `0x0c0c`; the join transition changes the retry limit again | Inherited bit 7, `0x40`, `0x3030`; no Android-style join transition | A test of ACK timeout and retry limit alone did not improve association. The combined vendor sequence is untested. Management frames now carry the vendor's per-frame retry limit of six. |
 | Rate fallback | Initializes registers `0x430` through `0x43c` | No 9082XS-specific fallback initialization | Relevant to later data rates; not demonstrated as the association blocker. |
