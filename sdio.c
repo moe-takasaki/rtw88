@@ -64,6 +64,8 @@ static u32 rtw_sdio_to_bus_offset(struct rtw_dev *rtwdev, u32 addr)
 		break;
 	case SDIO_LOCAL_OFFSET:
 		addr &= SDIO_LOCAL_REG_MSK;
+		if (rtwsdio->is_9082xs)
+			addr |= 0x2000;
 		addr |= FIELD_PREP(REG_SDIO_CMD_ADDR_MSK,
 				   REG_SDIO_CMD_ADDR_SDIO_REG);
 		break;
@@ -83,6 +85,18 @@ static bool rtw_sdio_use_memcpy_io(struct rtw_dev *rtwdev, u32 addr,
 	return IS_ALIGNED(addr, alignment) &&
 	       (rtwsdio->is_9082xs ||
 		test_bit(RTW_FLAG_POWERON, rtwdev->flags));
+}
+
+/* The 9082XS SDIO interrupt and RX length registers reverse bits in each
+ * nibble. Keep the rest of rtw88 working with the logical bit definitions.
+ */
+static u32 rtw_sdio_9082xs_reverse_nibbles(u32 val)
+{
+	val = ((val & 0x55555555) << 1) |
+	      ((val & 0xaaaaaaaa) >> 1);
+
+	return ((val & 0x33333333) << 2) |
+	       ((val & 0xcccccccc) >> 2);
 }
 
 static void rtw_sdio_writel(struct rtw_dev *rtwdev, u32 val, u32 addr,
@@ -335,10 +349,11 @@ static u8 rtw_sdio_read8(struct rtw_dev *rtwdev, u32 addr)
 static u16 rtw_sdio_read16(struct rtw_dev *rtwdev, u32 addr)
 {
 	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
-	bool direct, bus_claim;
+	bool direct, bus_claim, swap_bits;
 	int ret;
 	u16 val;
 
+	swap_bits = rtwsdio->is_9082xs && addr == REG_SDIO_RX0_REQ_LEN;
 	direct = rtw_sdio_use_direct_io(rtwdev, addr);
 	addr = rtw_sdio_to_io_address(rtwdev, addr, direct);
 	bus_claim = rtw_sdio_bus_claim_needed(rtwsdio);
@@ -358,6 +373,8 @@ static u16 rtw_sdio_read16(struct rtw_dev *rtwdev, u32 addr)
 		rtw_sdio_record_io_error(rtwsdio, ret);
 		rtw_warn(rtwdev, "sdio read16 failed (0x%x): %d", addr, ret);
 	}
+	if (swap_bits)
+		val = rtw_sdio_9082xs_reverse_nibbles(val);
 
 	return val;
 }
@@ -365,10 +382,13 @@ static u16 rtw_sdio_read16(struct rtw_dev *rtwdev, u32 addr)
 static u32 rtw_sdio_read32(struct rtw_dev *rtwdev, u32 addr)
 {
 	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
-	bool direct, bus_claim;
+	bool direct, bus_claim, swap_bits;
 	u32 val;
 	int ret;
 
+	swap_bits = rtwsdio->is_9082xs &&
+		    (addr == REG_SDIO_HIMR || addr == REG_SDIO_HISR ||
+		     addr == REG_SDIO_RX0_REQ_LEN);
 	direct = rtw_sdio_use_direct_io(rtwdev, addr);
 	addr = rtw_sdio_to_io_address(rtwdev, addr, direct);
 	bus_claim = rtw_sdio_bus_claim_needed(rtwsdio);
@@ -388,6 +408,8 @@ static u32 rtw_sdio_read32(struct rtw_dev *rtwdev, u32 addr)
 		rtw_sdio_record_io_error(rtwsdio, ret);
 		rtw_warn(rtwdev, "sdio read32 failed (0x%x): %d", addr, ret);
 	}
+	if (swap_bits)
+		val = rtw_sdio_9082xs_reverse_nibbles(val);
 
 	return val;
 }
@@ -506,6 +528,10 @@ static void rtw_sdio_write32(struct rtw_dev *rtwdev, u32 addr, u32 val)
 	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
 	bool direct, bus_claim;
 	int ret;
+
+	if (rtwsdio->is_9082xs &&
+	    (addr == REG_SDIO_HIMR || addr == REG_SDIO_HISR))
+		val = rtw_sdio_9082xs_reverse_nibbles(val);
 
 	direct = rtw_sdio_use_direct_io(rtwdev, addr);
 	addr = rtw_sdio_to_io_address(rtwdev, addr, direct);
