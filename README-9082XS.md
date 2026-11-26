@@ -2,6 +2,8 @@
 
 This branch starts from Igor Listopad's RTL8189ES `rtw88` work, PR #465 head `475584a581cb449a8616e0339ecb85bcb88c67aa`. The target device is SDIO `02e7:9082`, exposed by Lunar as `mmc2:0001:1`.
 
+This module implements the SDIO WLAN function. The supplied Android `9082xs.ko` does not register a Linux Bluetooth HCI device. On the current box, `hci0` is attached to a separate UART device-tree node with compatible `brcm,bcm43438-bt`; its HCI initialization times out on vendor command `0xfc18` while changing baud rate. That node's compatibility with the physical Bluetooth controller remains to be verified. Bluetooth bring-up is therefore a separate work item and is not provided by this WLAN module.
+
 The first patch adds a separate `rtw_9082xs` SDIO module and maps its WLAN register window to `0x14000` instead of RTL8189ES's `0x10000`. Six read-only register comparisons on hardware showed that the old window returns `0xea`, while the new window returns live register values. Other SDIO address spaces are left unchanged. The module builds against Lunar `6.18.41-lunar`.
 
 9082XS has its own chip description and MAC table. Initial comparison showed 91 of 92 shared byte values matched Igor's table after bit reversal, but the vendor table also has 40 byte addresses absent from Igor's and uses mixed 8-, 16- and 32-bit writes. The driver now replays all 49 recovered MAC write operations in their original order and width. A mechanical comparison against the diagnostic table confirmed exact agreement. Hardware readback after that diagnostic table confirmed `0x4026=0x82`, `0x4027=0xac`, and `0x4421=0xf0`. The new table also completed in the opt-in `rtw88` staged probe; runtime MAC behavior still needs validation.
