@@ -1473,12 +1473,17 @@ static void rtw8188e_phy_load_bb_tables(struct rtw_dev *rtwdev)
 
 static void rtw8188e_phy_rf6052_config(struct rtw_dev *rtwdev)
 {
+	u32 rfenv = RFSI_RFENV;
 	u32 val32;
 
-	val32 = rtw_read32_mask(rtwdev, REG_FPGA0_XA_RF_SW_CTRL, RFSI_RFENV);
-	rtw_write32_set(rtwdev, REG_FPGA0_XA_RF_INT_OE, RFSI_RFENV << 16);
+	/* 9082XS uses the bit-reversing BB accessor for RF environment bits. */
+	if (rtwdev->chip->efuse_id == 0x9082)
+		rfenv = bitrev8(RFSI_RFENV);
+
+	val32 = rtw_read32_mask(rtwdev, REG_FPGA0_XA_RF_SW_CTRL, rfenv);
+	rtw_write32_set(rtwdev, REG_FPGA0_XA_RF_INT_OE, rfenv << 16);
 	udelay(1);
-	rtw_write32_set(rtwdev, REG_FPGA0_XA_RF_INT_OE, RFSI_RFENV);
+	rtw_write32_set(rtwdev, REG_FPGA0_XA_RF_INT_OE, rfenv);
 	udelay(1);
 	rtw_write32_clr(rtwdev, REG_FPGA0_XA_HSSI_PARM2,
 			HSSI_3WIRE_ADDR_LEN | HSSI_3WIRE_DATA_LEN);
@@ -1486,7 +1491,7 @@ static void rtw8188e_phy_rf6052_config(struct rtw_dev *rtwdev)
 	rtw_load_table(rtwdev, rtwdev->chip->rf_tbl[RF_PATH_A]);
 	if (rtw_hci_get_io_error(rtwdev))
 		return;
-	rtw_write32_mask(rtwdev, REG_FPGA0_XA_RF_SW_CTRL, RFSI_RFENV, val32);
+	rtw_write32_mask(rtwdev, REG_FPGA0_XA_RF_SW_CTRL, rfenv, val32);
 }
 
 static void rtw8188e_init_transfer_page_size(struct rtw_dev *rtwdev)
