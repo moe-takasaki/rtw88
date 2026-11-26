@@ -2519,7 +2519,9 @@ int rtw_register_hw(struct rtw_dev *rtwdev, struct ieee80211_hw *hw)
 	hw->vif_data_size = sizeof(struct rtw_vif);
 
 	ieee80211_hw_set(hw, SIGNAL_DBM);
-	ieee80211_hw_set(hw, RX_INCLUDES_FCS);
+	/* 9082XS RX packet length excludes the FCS. */
+	if (rtwdev->chip->efuse_id != 0x9082)
+		ieee80211_hw_set(hw, RX_INCLUDES_FCS);
 	ieee80211_hw_set(hw, AMPDU_AGGREGATION);
 	ieee80211_hw_set(hw, MFP_CAPABLE);
 	ieee80211_hw_set(hw, REPORTS_TX_ACK_STATUS);
