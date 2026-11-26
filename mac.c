@@ -427,8 +427,11 @@ err:
 
 void rtw_mac_power_off(struct rtw_dev *rtwdev)
 {
-	/* The RTL8188E shutdown sequence is not valid for the 9082XS. */
-	if (rtwdev->chip->efuse_id == 0x9082) {
+	if (rtwdev->chip->power_off_chip) {
+		int ret = rtwdev->chip->power_off_chip(rtwdev);
+
+		if (ret)
+			rtw_err(rtwdev, "chip power-off failed: %d\n", ret);
 		clear_bit(RTW_FLAG_POWERON, rtwdev->flags);
 		return;
 	}

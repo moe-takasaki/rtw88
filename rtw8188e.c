@@ -334,6 +334,43 @@ static const struct rtw_pwr_seq_cmd * const card_disable_flow_9082xs[] = {
 	NULL,
 };
 
+static int rtw9082xs_mac_power_off(struct rtw_dev *rtwdev)
+{
+	static const struct rtw_pwr_seq_cmd * const enter_lps[] = {
+		enter_lps_9082xs, NULL,
+	};
+	static const struct rtw_pwr_seq_cmd * const close[] = {
+		close_9082xs, NULL,
+	};
+	u8 value;
+	int ret;
+
+	rtw_write8_clr(rtwdev, 0x04ec, BIT(6));
+	rtw_write8(rtwdev, REG_CR, 0);
+	value = rtw_read8(rtwdev, 0x0044);
+	rtw_write8(rtwdev, 0x0045, value);
+	rtw_write8(rtwdev, 0x0046, 0xff);
+	value = rtw_read8(rtwdev, 0x0042);
+	rtw_write8(rtwdev, 0x0042, value | (value >> 4));
+	value = rtw_read8(rtwdev, 0x0043);
+	rtw_write8(rtwdev, 0x0043, value | 0xf0);
+
+	ret = rtw_pwr_seq_parser(rtwdev, enter_lps);
+	if (ret)
+		return ret;
+
+	if ((rtw_read8(rtwdev, REG_MCUFW_CTRL) & BIT(0)) &&
+	    test_bit(RTW_FLAG_FW_RUNNING, rtwdev->flags))
+		rtw_write8_clr(rtwdev, REG_SYS_FUNC_EN + 1, BIT(5));
+	rtw_write8(rtwdev, REG_MCUFW_CTRL, 0);
+
+	ret = rtw_pwr_seq_parser(rtwdev, close);
+	if (ret)
+		return ret;
+	rtw_write8(rtwdev, 0x001c, 0x70);
+	return 0;
+}
+
 static const struct rtw_page_table page_table_8188e[] = {
 	{12, 0, 9, 0, 1},
 };
@@ -2997,6 +3034,7 @@ const struct rtw_chip_info rtw9082xs_hw_spec = {
 	.fw_name = "tilk/9082xs-nic.bin",
 	.raw_legacy_fw = true,
 	.stop_after_efuse = true,
+	.power_off_chip = rtw9082xs_mac_power_off,
 	.wlan_cpu = RTW_WCPU_8051,
 	.tx_pkt_desc_sz = 32,
 	.rx_pkt_desc_sz = 24,
