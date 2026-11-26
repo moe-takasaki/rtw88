@@ -1514,7 +1514,9 @@ static int rtw_drv_info_cfg(struct rtw_dev *rtwdev)
 {
 	u8 value8;
 
-	rtw_write8(rtwdev, REG_RX_DRVINFO_SZ, PHY_STATUS_SIZE);
+	/* The 9082XS vendor initialization programs this field as 0x20. */
+	rtw_write8(rtwdev, REG_RX_DRVINFO_SZ,
+		   rtwdev->chip->efuse_id == 0x9082 ? 0x20 : PHY_STATUS_SIZE);
 	if (rtw_chip_wcpu_3081(rtwdev)) {
 		value8 = rtw_read8(rtwdev, REG_TRXFF_BNDY + 1);
 		value8 &= 0xF0;
@@ -1522,7 +1524,8 @@ static int rtw_drv_info_cfg(struct rtw_dev *rtwdev)
 		value8 |= 0xF;
 		rtw_write8(rtwdev, REG_TRXFF_BNDY + 1, value8);
 	}
-	rtw_write32_set(rtwdev, REG_RCR, BIT_APP_PHYSTS);
+	if (rtwdev->chip->efuse_id != 0x9082)
+		rtw_write32_set(rtwdev, REG_RCR, BIT_APP_PHYSTS);
 	rtw_write32_clr(rtwdev, REG_WMAC_OPTION_FUNCTION + 4, BIT(8) | BIT(9));
 
 	return 0;

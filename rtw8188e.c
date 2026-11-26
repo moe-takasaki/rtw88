@@ -850,9 +850,14 @@ static int rtw8188e_llt_init(struct rtw_dev *rtwdev)
 
 static int rtw8188e_mac_init(struct rtw_dev *rtwdev)
 {
-	/* Management reception requires RCR.AMF as well as RXFLTMAP0. */
-	rtwdev->hal.rcr |= BIT_AMF;
-	rtwdev->hal.rcr &= ~(BIT_VHT_DACK | BIT_PKTCTL_DLEN);
+	if (rtwdev->chip->efuse_id == 0x9082) {
+		/* WMACSetting_init uses a different RCR layout on 9082XS. */
+		rtwdev->hal.rcr = 0x0e000673;
+	} else {
+		/* Management reception requires RCR.AMF and RXFLTMAP0. */
+		rtwdev->hal.rcr |= BIT_AMF;
+		rtwdev->hal.rcr &= ~(BIT_VHT_DACK | BIT_PKTCTL_DLEN);
+	}
 	rtw_write16(rtwdev, REG_TRXFF_BNDY + 2,
 		    rtwdev->chip->rxff_size - RTW8188E_RX_DMA_RESERVED_SIZE - 1);
 	rtw_write16_set(rtwdev, REG_CR, BIT_MAC_SEC_EN |
@@ -1049,7 +1054,8 @@ static int rtw8188e_set_pwr_mode(struct rtw_dev *rtwdev)
 static void rtw8188e_config_rx_aggregation(struct rtw_dev *rtwdev)
 {
 	rtw_write8(rtwdev, REG_RXDMA_AGG_PG_TH, 0x24);
-	rtw_write8(rtwdev, REG_RXDMA_AGG_PG_TH + 1, 0x06);
+	rtw_write8(rtwdev, REG_RXDMA_AGG_PG_TH + 1,
+		   rtwdev->chip->efuse_id == 0x9082 ? 0x60 : 0x06);
 	rtw_write8_set(rtwdev, REG_TXDMA_PQ_MAP, BIT_RXDMA_AGG_EN);
 }
 
