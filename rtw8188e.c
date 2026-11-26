@@ -2934,6 +2934,15 @@ static void rtw8188e_tx_prepare(struct rtw_dev *rtwdev,
 		rtwvif = (struct rtw_vif *)vif->drv_priv;
 		pkt_info->port_id = rtwvif->port;
 	}
+	/* SDIO assigns QSEL after this callback, so inspect the frame header. */
+	if (rtwdev->chip->efuse_id == 0x9082 &&
+	    ieee80211_is_mgmt(hdr->frame_control) &&
+	    !ieee80211_is_beacon(hdr->frame_control)) {
+		pkt_info->seq =
+			(le16_to_cpu(hdr->seq_ctrl) & IEEE80211_SCTL_SEQ) >> 4;
+		pkt_info->en_hwseq = false;
+		pkt_info->dis_rate_fallback = false;
+	}
 }
 
 struct rtw8188e_ra_report_data {
@@ -3105,6 +3114,15 @@ static void rtw8188e_fill_tx_desc(struct rtw_dev *rtwdev,
 		   le32_encode_bits(pkt_info->short_gi, RTW8188E_TX_DESC_W5_SHORT_GI) |
 		   cpu_to_le32(RTW8188E_TX_DESC_W5_DATA_FB_LIMIT |
 			       RTW8188E_TX_DESC_W5_RTS_FB_LIMIT);
+	/* 9082XS management frames use an explicit retry limit of six. */
+	if (rtwdev->chip->efuse_id == 0x9082 &&
+	    pkt_info->qsel == TX_DESC_QSEL_MGMT)
+		txdesc->w5 =
+			le32_encode_bits(pkt_info->rate,
+					   RTW8188E_TX_DESC_W5_DATARATE) |
+			le32_encode_bits(6,
+					   RTW9082XS_TX_DESC_W5_RETRY_LIMIT) |
+			cpu_to_le32(RTW9082XS_TX_DESC_W5_RETRY_LIMIT_EN);
 	txdesc->w6 = le32_encode_bits(pkt_info->ampdu_factor,
 				      RTW8188E_TX_DESC_W6_MAX_AGG_NUM);
 	txdesc->w7 = le32_encode_bits(pkt_info->sn, RTW8188E_TX_DESC_W7_SW_DEFINE);
