@@ -858,7 +858,8 @@ static int rtw8188e_mac_init(struct rtw_dev *rtwdev)
 	rtw_write16_set(rtwdev, REG_CR, BIT_MAC_SEC_EN |
 			BIT_32K_CAL_TMR_EN);
 	rtw_write16(rtwdev, REG_RXFLTMAP0, 0xffff);
-	rtwdev->hal.rxfltmap1 = 0x400;
+	if (rtwdev->chip->efuse_id != 0x9082 || !rtwdev->hal.rxfltmap1)
+		rtwdev->hal.rxfltmap1 = 0x400;
 	rtw_write16(rtwdev, REG_RXFLTMAP1, rtwdev->hal.rxfltmap1);
 	rtw_write16(rtwdev, REG_RXFLTMAP2, 0xffff);
 	rtw_write32(rtwdev, REG_RCR, rtwdev->hal.rcr);

@@ -269,7 +269,9 @@ static void rtw_ops_remove_interface(struct ieee80211_hw *hw,
 	config |= PORT_SET_NET_TYPE;
 	rtwvif->bcn_ctrl = 0;
 	config |= PORT_SET_BCN_CTRL;
-	rtw_vif_port_config(rtwdev, rtwvif, config);
+	if (rtwdev->chip->efuse_id != 0x9082 ||
+	    test_bit(RTW_FLAG_POWERON, rtwdev->flags))
+		rtw_vif_port_config(rtwdev, rtwvif, config);
 	clear_bit(rtwvif->port, rtwdev->hw_port);
 	rtw_release_macid(rtwdev, rtwvif->mac_id);
 	rtw_recalc_lps(rtwdev, NULL);
@@ -300,6 +302,7 @@ static void rtw_ops_configure_filter(struct ieee80211_hw *hw,
 				     u64 multicast)
 {
 	struct rtw_dev *rtwdev = hw->priv;
+	bool write_hw;
 
 	*new_flags &= FIF_ALLMULTI | FIF_OTHER_BSS | FIF_FCSFAIL |
 		      FIF_BCN_PRBRESP_PROMISC | FIF_CONTROL;
@@ -307,12 +310,16 @@ static void rtw_ops_configure_filter(struct ieee80211_hw *hw,
 	mutex_lock(&rtwdev->mutex);
 
 	rtw_leave_lps_deep(rtwdev);
+	write_hw = rtwdev->chip->efuse_id != 0x9082 ||
+		   test_bit(RTW_FLAG_POWERON, rtwdev->flags);
+	if (rtwdev->chip->efuse_id == 0x9082)
+		rtwdev->hal.rxfltmap1 = *new_flags & FIF_CONTROL ? 0xffff : 0x400;
 
 	if (changed_flags & FIF_CONTROL) {
-		if (*new_flags & FIF_CONTROL)
-			rtw_write16(rtwdev, REG_RXFLTMAP1, 0xffff);
-		else
-			rtw_write16(rtwdev, REG_RXFLTMAP1, rtwdev->hal.rxfltmap1);
+		if (write_hw)
+			rtw_write16(rtwdev, REG_RXFLTMAP1,
+				    *new_flags & FIF_CONTROL ?
+				    0xffff : rtwdev->hal.rxfltmap1);
 	}
 	if (changed_flags & FIF_ALLMULTI) {
 		if (*new_flags & FIF_ALLMULTI)
@@ -343,7 +350,8 @@ static void rtw_ops_configure_filter(struct ieee80211_hw *hw,
 		"config rx filter, changed=0x%08x, new=0x%08x, rcr=0x%08x\n",
 		changed_flags, *new_flags, rtwdev->hal.rcr);
 
-	rtw_write32(rtwdev, REG_RCR, rtwdev->hal.rcr);
+	if (write_hw)
+		rtw_write32(rtwdev, REG_RCR, rtwdev->hal.rcr);
 
 	mutex_unlock(&rtwdev->mutex);
 }

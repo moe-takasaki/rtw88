@@ -1633,12 +1633,28 @@ int rtw_core_start(struct rtw_dev *rtwdev)
 		return ret;
 
 	rtw_sec_enable_sec_engine(rtwdev);
+	if (rtwdev->chip->efuse_id == 0x9082) {
+		ret = rtw_hci_get_io_error(rtwdev);
+		if (ret) {
+			rtw_err(rtwdev, "security setup register access failed: %d\n",
+				ret);
+			goto err_power_off;
+		}
+	}
 
 	rtwdev->lps_conf.deep_mode = rtw_update_lps_deep_mode(rtwdev, &rtwdev->fw);
 	rtwdev->lps_conf.wow_deep_mode = rtw_update_lps_deep_mode(rtwdev, &rtwdev->wow_fw);
 
 	/* rcr reset after powered on */
 	rtw_write32(rtwdev, REG_RCR, rtwdev->hal.rcr);
+	if (rtwdev->chip->efuse_id == 0x9082) {
+		ret = rtw_hci_get_io_error(rtwdev);
+		if (ret) {
+			rtw_err(rtwdev, "receive filter register access failed: %d\n",
+				ret);
+			goto err_power_off;
+		}
+	}
 
 	ieee80211_queue_delayed_work(rtwdev->hw, &rtwdev->watch_dog_work,
 				     RTW_WATCH_DOG_DELAY_TIME);
@@ -1646,6 +1662,11 @@ int rtw_core_start(struct rtw_dev *rtwdev)
 	set_bit(RTW_FLAG_RUNNING, rtwdev->flags);
 
 	return 0;
+
+err_power_off:
+	rtw_power_off(rtwdev);
+	clear_bit(RTW_FLAG_FW_RUNNING, rtwdev->flags);
+	return ret;
 }
 
 void rtw_power_off(struct rtw_dev *rtwdev)
@@ -1661,8 +1682,11 @@ void rtw_core_stop(struct rtw_dev *rtwdev)
 	struct rtw_coex *coex = &rtwdev->coex;
 
 	clear_bit(RTW_FLAG_RUNNING, rtwdev->flags);
-	clear_bit(RTW_FLAG_FW_RUNNING, rtwdev->flags);
-	if (rtwdev->chip->ops->config_bcn)
+	if (rtwdev->chip->efuse_id != 0x9082)
+		clear_bit(RTW_FLAG_FW_RUNNING, rtwdev->flags);
+	if (rtwdev->chip->ops->config_bcn &&
+	    (rtwdev->chip->efuse_id != 0x9082 ||
+	     test_bit(RTW_FLAG_POWERON, rtwdev->flags)))
 		rtwdev->chip->ops->config_bcn(rtwdev, NULL, false);
 
 	mutex_unlock(&rtwdev->mutex);
@@ -1681,7 +1705,11 @@ void rtw_core_stop(struct rtw_dev *rtwdev)
 
 	mutex_lock(&rtwdev->mutex);
 
-	rtwdev->chip->ops->power_off(rtwdev);
+	if (rtwdev->chip->efuse_id != 0x9082 ||
+	    test_bit(RTW_FLAG_POWERON, rtwdev->flags))
+		rtwdev->chip->ops->power_off(rtwdev);
+	if (rtwdev->chip->efuse_id == 0x9082)
+		clear_bit(RTW_FLAG_FW_RUNNING, rtwdev->flags);
 }
 
 static void rtw_init_ht_cap(struct rtw_dev *rtwdev,
