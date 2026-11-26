@@ -1554,6 +1554,27 @@ static void rtw8188e_init_adaptive_ctrl(struct rtw_dev *rtwdev)
 	rtw_write16(rtwdev, REG_RETRY_LIMIT, 0x3030);
 }
 
+static void rtw8188e_init_mac_9082xs(struct rtw_dev *rtwdev)
+{
+	/* 9082XS MAC timing and fallback values use reversed bit order. */
+	rtw_write16(rtwdev, REG_SPEC_SIFS, 0x0850);
+	rtw_write16(rtwdev, REG_MAC_SPEC_SIFS, 0x0850);
+	rtw_write16(rtwdev, REG_SIFS, 0x0850);
+	rtw_write16(rtwdev, REG_SIFS + 2, 0x0850);
+	rtw_write32(rtwdev, REG_EDCA_BE_PARAM, 0x007a25d4);
+	rtw_write32(rtwdev, REG_EDCA_BK_PARAM, 0x000025f2);
+	rtw_write32(rtwdev, REG_EDCA_VI_PARAM, 0x007ac524);
+	rtw_write32(rtwdev, REG_EDCA_VO_PARAM, 0x00f44564);
+	rtw_write32(rtwdev, REG_DARFRC, 0);
+	rtw_write32(rtwdev, REG_DARFRCH, 0x08102020);
+	rtw_write32(rtwdev, REG_RARFRC, 0x20c04080);
+	rtw_write32(rtwdev, REG_RARFRCH, 0x10e060a0);
+	rtw_write8_clr(rtwdev, REG_FWHW_TXQ_CTRL, BIT(7));
+	rtw_write8_set(rtwdev, REG_FWHW_TXQ_CTRL, BIT(0));
+	rtw_write8(rtwdev, REG_ACKTO, 0x02);
+	rtw_write16(rtwdev, REG_RETRY_LIMIT, 0x0c0c);
+}
+
 static void rtw8188e_init_beacon_parameters(struct rtw_dev *rtwdev)
 {
 	rtw_write16(rtwdev, REG_BCN_CTRL,
@@ -1733,6 +1754,8 @@ static void rtw8188e_phy_set_param(struct rtw_dev *rtwdev)
 	rtw_phy_init(rtwdev);
 	rtw8188e_pwrtrack_init(rtwdev);
 	rtw8188e_init_pa_bias(rtwdev);
+	if (chip->efuse_id == 0x9082)
+		rtw8188e_init_mac_9082xs(rtwdev);
 }
 
 static void rtw8188e_set_channel(struct rtw_dev *rtwdev, u8 channel,

@@ -32,15 +32,14 @@ implements these distinctions in the paths that have been traced and tested.
 It also matches the observed Android RCR value `0x0e000673`, RX driver-info
 size `0x20`, RX aggregation timeout `0x60`, TX queue-page allocation, MAC/BSSID
 write widths, management TX descriptor, control-frame filter map and the main
-IQK register sequences.
+IQK register sequences. SIFS, EDCA, rate fallback and initial ACK/retry
+values now match observed Android readback; association still times out.
 
 ## Still different
 
 | Area | Android module | Current `s9082c` branch | Evidence and limit |
 | --- | --- | --- | --- |
-| SIFS and EDCA | Writes four SIFS registers to `0x0850` and four AC queue parameters | No equivalent 9082XS initialization; mac80211 configures ACs later | A four-SIFS-register test alone did not improve association. The full EDCA set was not tested. |
-| Retry and ACK control | `FWHW_TXQ_CTRL` bit 0, `ACKTO=0x02`, init retry limit `0x0c0c`; the join transition changes the retry limit again | Inherited bit 7, `0x40`, `0x3030`; no Android-style join transition | A test of ACK timeout and retry limit alone did not improve association. The combined vendor sequence is untested. Management frames now carry the vendor's per-frame retry limit of six. |
-| Rate fallback | Initializes registers `0x430` through `0x43c` | No 9082XS-specific fallback initialization | Relevant to later data rates; not demonstrated as the association blocker. |
+| Join-time MAC transition | Temporarily adjusts RCR, RX filter map and retry limit while joining | Initial SIFS, EDCA, rate fallback and ACK/retry values now match; no Android-style join transition | The combined initial register sequence was tested and did not establish association. The join transition remains untested. |
 | TX reports | Enables bits `0xc0` in `TX_RPT_CTRL`, sets `TX_RPT_CTRL+1=0x40` and timer `0xb30f` | Inherited bits `0x03`, maximum MACID `0x20`, timer `0x927c` | A completed test verified Android register readback, enabled mac80211 ACK-status requests and observed numbered report requests, but no RX report type 1/2 arrived. The branch therefore still does not advertise ACK-report support. |
 | Calibration and power tracking | Runs IQK, power-tracking setup, then LCK during HAL initialization; uses SCI tables and BB access | Runs LCK then the adapted IQK at first managed TX; retains RTL8188E power-tracking tables and runtime matrix writes | IQK now produces changing TX values and RX shots. Their effect on TX quality, and the power-tracking path, remain unverified. |
 | Firmware and low power | Android firmware initialization, reserved pages, H2C/C2H and power-mode transitions | Reuses the 8188E firmware interface with 9082XS adaptations | The expected TX report is absent; WPA and data traffic have not been established. A no-LPS test could not evaluate the associated state. |
