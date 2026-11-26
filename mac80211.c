@@ -219,7 +219,9 @@ static int rtw_ops_add_interface(struct ieee80211_hw *hw,
 		break;
 	case NL80211_IFTYPE_STATION:
 		rtw_add_rsvd_page_sta(rtwdev, rtwvif);
-		net_type = RTW_NET_NO_LINK;
+		/* Android selects infrastructure MSR before association. */
+		net_type = rtwdev->chip->efuse_id == 0x9082 && port == 0 ?
+			   RTW_NET_MGD_LINKED : RTW_NET_NO_LINK;
 		bcn_ctrl = rtwdev->chip->efuse_id == 0x9082 && port == 0 ?
 			   0x98 : BIT_EN_BCN_FUNCTION;
 		break;
@@ -430,6 +432,9 @@ static void rtw_ops_bss_info_changed(struct ieee80211_hw *hw,
 
 	if (changed & BSS_CHANGED_ASSOC) {
 		rtw_vif_assoc_changed(rtwvif, conf);
+		if (rtwdev->chip->efuse_id == 0x9082 &&
+		    rtwvif->port == 0 && vif->type == NL80211_IFTYPE_STATION)
+			rtwvif->net_type = RTW_NET_MGD_LINKED;
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0))
 		if (vif->cfg.assoc) {
 #else
