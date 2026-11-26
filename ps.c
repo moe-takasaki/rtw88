@@ -15,8 +15,10 @@ static int rtw_ips_pwr_up(struct rtw_dev *rtwdev)
 	int ret;
 
 	ret = rtw_core_start(rtwdev);
-	if (ret)
+	if (ret) {
 		rtw_err(rtwdev, "leave idle state failed\n");
+		return ret;
+	}
 
 	rtw_coex_ips_notify(rtwdev, COEX_IPS_LEAVE);
 	rtw_set_channel(rtwdev);

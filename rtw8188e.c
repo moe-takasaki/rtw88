@@ -1760,8 +1760,12 @@ static void rtw8188e_set_channel(struct rtw_dev *rtwdev, u8 channel,
 	}
 	rf &= ~(GENMASK(9, 0) | GENMASK(11, 10));
 	rf |= channel | ((wide ? 1 : 3) << 10);
-	if (rtwdev->chip->efuse_id == 0x9082)
+	if (rtwdev->chip->efuse_id == 0x9082) {
 		priv->rf18 = rf;
+		rtw_dbg(rtwdev, RTW_DBG_PHY,
+			"9082XS channel %u bandwidth %u RF18=0x%05x\n",
+			channel, bw, rf);
+	}
 	rtw_write_rf(rtwdev, RF_PATH_A, RF_CFGCH, RFREG_MASK, rf);
 	rtw8188e_pwrtrack_set_cck_pwr(rtwdev, channel);
 }

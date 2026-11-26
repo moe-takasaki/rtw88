@@ -168,7 +168,16 @@ static int rtw_debugfs_get_read_reg(struct seq_file *m, void *v)
 {
 	struct rtw_debugfs_priv *debugfs_priv = m->private;
 	struct rtw_dev *rtwdev = debugfs_priv->rtwdev;
+	bool guard_power = rtwdev->chip->efuse_id == 0x9082;
 	u32 val, len, addr;
+
+	if (guard_power) {
+		mutex_lock(&rtwdev->mutex);
+		if (!test_bit(RTW_FLAG_POWERON, rtwdev->flags)) {
+			mutex_unlock(&rtwdev->mutex);
+			return -ENETDOWN;
+		}
+	}
 
 	len = debugfs_priv->read_reg.len;
 	addr = debugfs_priv->read_reg.addr;
@@ -186,6 +195,8 @@ static int rtw_debugfs_get_read_reg(struct seq_file *m, void *v)
 		seq_printf(m, "reg 0x%03x: 0x%08x\n", addr, val);
 		break;
 	}
+	if (guard_power)
+		mutex_unlock(&rtwdev->mutex);
 	return 0;
 }
 
@@ -201,6 +212,11 @@ static int rtw_debugfs_get_rf_read(struct seq_file *m, void *v)
 	mask = debugfs_priv->rf_mask;
 
 	mutex_lock(&rtwdev->mutex);
+	if (rtwdev->chip->efuse_id == 0x9082 &&
+	    !test_bit(RTW_FLAG_POWERON, rtwdev->flags)) {
+		mutex_unlock(&rtwdev->mutex);
+		return -ENETDOWN;
+	}
 	val = rtw_read_rf(rtwdev, path, addr, mask);
 	mutex_unlock(&rtwdev->mutex);
 
@@ -395,6 +411,7 @@ static ssize_t rtw_debugfs_set_write_reg(struct file *filp,
 {
 	struct rtw_debugfs_priv *debugfs_priv = filp->private_data;
 	struct rtw_dev *rtwdev = debugfs_priv->rtwdev;
+	bool guard_power = rtwdev->chip->efuse_id == 0x9082;
 	char tmp[32 + 1];
 	u32 addr, val, len;
 	int num;
@@ -409,6 +426,13 @@ static ssize_t rtw_debugfs_set_write_reg(struct file *filp,
 
 	if (num !=  3)
 		return -EINVAL;
+	if (guard_power) {
+		mutex_lock(&rtwdev->mutex);
+		if (!test_bit(RTW_FLAG_POWERON, rtwdev->flags)) {
+			mutex_unlock(&rtwdev->mutex);
+			return -ENETDOWN;
+		}
+	}
 
 	switch (len) {
 	case 1:
@@ -431,6 +455,8 @@ static ssize_t rtw_debugfs_set_write_reg(struct file *filp,
 			"error write length = %d\n", len);
 		break;
 	}
+	if (guard_power)
+		mutex_unlock(&rtwdev->mutex);
 
 	return count;
 }
