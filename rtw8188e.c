@@ -1087,13 +1087,17 @@ static int rtw8188e_write_page(struct rtw_dev *rtwdev, u16 page, u8 *buf,
 			       u32 size, bool beacon)
 {
 	const u32 valid_addr = REG_DWBCN0_CTRL + 2;
-	const u8 valid_mask = BIT_BCN_VALID >> 16;
+	bool is_9082xs = rtwdev->chip->efuse_id == 0x9082;
+	u8 valid_mask = is_9082xs ? BIT(7) : BIT_BCN_VALID >> 16;
+	u8 cr_enable = is_9082xs ? BIT(7) : BIT_ENSWBCN >> 8;
+	u8 txq_mask = is_9082xs ? BIT(1) : BIT_EN_BCNQ_DL >> 16;
 	u8 cr, bcn_ctrl, txq_ctrl = 0, head;
 	u8 valid;
 	int ret;
 
 	lockdep_assert_held(&rtwdev->mutex);
 
+	/* The 9082XS firmware-page handshake uses physical reversed bits. */
 	cr = rtw_read8(rtwdev, REG_CR + 1);
 	bcn_ctrl = rtw_read8(rtwdev, REG_BCN_CTRL);
 	if (!beacon)
@@ -1102,13 +1106,18 @@ static int rtw8188e_write_page(struct rtw_dev *rtwdev, u16 page, u8 *buf,
 	rtw_write8(rtwdev, REG_DWBCN0_CTRL + 1, page);
 	/* BCN_VALID is write-one-to-clear. Leave the other bytes alone. */
 	rtw_write8_set(rtwdev, valid_addr, valid_mask);
-	rtw_write8(rtwdev, REG_CR + 1, cr | (BIT_ENSWBCN >> 8));
-	rtw_write8(rtwdev, REG_BCN_CTRL,
-		   (bcn_ctrl & ~BIT_EN_BCN_FUNCTION) | BIT_DIS_TSF_UDT);
+	rtw_write8(rtwdev, REG_CR + 1, cr | cr_enable);
+	if (is_9082xs)
+		rtw_write8(rtwdev, REG_BCN_CTRL,
+			   (bcn_ctrl & ~BIT(4)) | BIT(3));
+	else
+		rtw_write8(rtwdev, REG_BCN_CTRL,
+			   (bcn_ctrl & ~BIT_EN_BCN_FUNCTION) |
+			   BIT_DIS_TSF_UDT);
 	/* Clearing EN_BCNQ_DL marks the upload as a reserved-page packet. */
 	if (!beacon)
 		rtw_write8(rtwdev, REG_FWHW_TXQ_CTRL + 2,
-			   txq_ctrl & ~(BIT_EN_BCNQ_DL >> 16));
+			   txq_ctrl & ~txq_mask);
 
 	ret = rtw_hci_write_data_rsvd_page(rtwdev, buf, size);
 	if (!ret && read_poll_timeout(rtw_read8, valid, valid & valid_mask,
