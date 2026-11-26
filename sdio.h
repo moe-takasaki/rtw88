@@ -169,6 +169,7 @@ struct rtw_sdio {
 	bool is_9082xs;
 
 	u32 irq_mask;
+	bool irq_claimed;
 	u8 rx_addr;
 	bool sdio3_bus_mode;
 

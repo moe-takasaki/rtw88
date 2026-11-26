@@ -1130,6 +1130,11 @@ static int rtw_sdio_start(struct rtw_dev *rtwdev)
 
 static void rtw_sdio_stop(struct rtw_dev *rtwdev)
 {
+	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
+
+	if (!rtwsdio->irq_claimed)
+		return;
+
 	rtw_sdio_disable_interrupt(rtwdev);
 }
 
@@ -1797,6 +1802,7 @@ static const struct rtw_hci_ops rtw_sdio_ops = {
 static int rtw_sdio_request_irq(struct rtw_dev *rtwdev,
 				struct sdio_func *sdio_func)
 {
+	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
 	int ret;
 
 	sdio_claim_host(sdio_func);
@@ -1807,6 +1813,7 @@ static int rtw_sdio_request_irq(struct rtw_dev *rtwdev,
 		rtw_err(rtwdev, "failed to claim SDIO IRQ");
 		return ret;
 	}
+	rtwsdio->irq_claimed = true;
 
 	return 0;
 }
@@ -1964,6 +1971,9 @@ static void rtw_sdio_tx_handler(struct work_struct *work)
 static void rtw_sdio_free_irq(struct rtw_dev *rtwdev,
 			      struct sdio_func *sdio_func)
 {
+	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
+
+	rtwsdio->irq_claimed = false;
 	sdio_claim_host(sdio_func);
 	sdio_release_irq(sdio_func);
 	sdio_release_host(sdio_func);
