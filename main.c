@@ -991,7 +991,16 @@ void rtw_vif_port_config(struct rtw_dev *rtwdev,
 	if (config & PORT_SET_AID) {
 		addr = rtwvif->conf->aid.addr;
 		mask = rtwvif->conf->aid.mask;
-		rtw_write32_mask(rtwdev, addr, mask, rtwvif->aid);
+		if (rtwdev->chip->efuse_id == 0x9082 && rtwvif->port == 0) {
+			/* Android reverses both bytes of the join-report AID. */
+			u16 aid = rtwvif->aid ? 0xc000 | rtwvif->aid : 0;
+			u16 encoded = bitrev8(aid) |
+				      (u16)bitrev8(aid >> 8) << 8;
+
+			rtw_write16(rtwdev, addr, encoded);
+		} else {
+			rtw_write32_mask(rtwdev, addr, mask, rtwvif->aid);
+		}
 	}
 	if (config & PORT_SET_BCN_CTRL) {
 		addr = rtwvif->conf->bcn_ctrl.addr;

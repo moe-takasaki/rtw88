@@ -912,7 +912,15 @@ static void rtw8188e_set_default_port(struct rtw_dev *rtwdev,
 		rtw_write8_set(rtwdev, rtwvif->conf->bcn_ctrl.addr,
 			       BIT_DIS_ATIM);
 	}
-	rtw_write16(rtwdev, rtwvif->conf->aid.addr, 0xc000 | rtwvif->aid);
+	if (rtwdev->chip->efuse_id == 0x9082 && rtwvif->port == 0) {
+		u16 aid = 0xc000 | rtwvif->aid;
+
+		rtw_write16(rtwdev, rtwvif->conf->aid.addr,
+			    bitrev8(aid) | (u16)bitrev8(aid >> 8) << 8);
+	} else {
+		rtw_write16(rtwdev, rtwvif->conf->aid.addr,
+			    0xc000 | rtwvif->aid);
+	}
 	if (!rtwdev->ap_active)
 		rtw_write16(rtwdev, REG_MBSSID_BCN_SPACE, vif->bss_conf.beacon_int);
 }
