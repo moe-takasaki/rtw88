@@ -13,6 +13,7 @@ struct rtw_hci_ops {
 	void (*tx_kick_off)(struct rtw_dev *rtwdev);
 	void (*flush_queues)(struct rtw_dev *rtwdev, u32 queues, bool drop);
 	int (*setup)(struct rtw_dev *rtwdev);
+	int (*power_on_chip)(struct rtw_dev *rtwdev);
 	int (*start)(struct rtw_dev *rtwdev);
 	void (*stop)(struct rtw_dev *rtwdev);
 	void (*deep_ps)(struct rtw_dev *rtwdev, bool enter);
@@ -21,6 +22,8 @@ struct rtw_hci_ops {
 	void (*dynamic_rx_agg)(struct rtw_dev *rtwdev, bool enable);
 	void (*write_firmware_page)(struct rtw_dev *rtwdev, u32 page,
 				    const u8 *data, u32 size);
+	int (*write_firmware_page_checked)(struct rtw_dev *rtwdev, u32 page,
+					   const u8 *data, u32 size);
 
 	int (*write_data_rsvd_page)(struct rtw_dev *rtwdev, u8 *buf, u32 size);
 	int (*write_data_h2c)(struct rtw_dev *rtwdev, u8 *buf, u32 size);
@@ -48,6 +51,14 @@ static inline void rtw_hci_tx_kick_off(struct rtw_dev *rtwdev)
 static inline int rtw_hci_setup(struct rtw_dev *rtwdev)
 {
 	return rtwdev->hci.ops->setup(rtwdev);
+}
+
+static inline int rtw_hci_power_on_chip(struct rtw_dev *rtwdev)
+{
+	if (!rtwdev->hci.ops->power_on_chip)
+		return -EOPNOTSUPP;
+
+	return rtwdev->hci.ops->power_on_chip(rtwdev);
 }
 
 static inline int rtw_hci_start(struct rtw_dev *rtwdev)
@@ -85,6 +96,17 @@ static inline void rtw_hci_write_firmware_page(struct rtw_dev *rtwdev, u32 page,
 					       const u8 *data, u32 size)
 {
 	rtwdev->hci.ops->write_firmware_page(rtwdev, page, data, size);
+}
+
+static inline int rtw_hci_write_firmware_page_checked(struct rtw_dev *rtwdev,
+						      u32 page, const u8 *data,
+						      u32 size)
+{
+	if (!rtwdev->hci.ops->write_firmware_page_checked)
+		return -EOPNOTSUPP;
+
+	return rtwdev->hci.ops->write_firmware_page_checked(rtwdev, page,
+							    data, size);
 }
 
 static inline int

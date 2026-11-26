@@ -388,6 +388,13 @@ int rtw_mac_power_on(struct rtw_dev *rtwdev)
 {
 	int ret = 0;
 
+	if (rtwdev->chip->efuse_id == 0x9082) {
+		ret = rtw_hci_power_on_chip(rtwdev);
+		if (!ret)
+			set_bit(RTW_FLAG_POWERON, rtwdev->flags);
+		return ret;
+	}
+
 	ret = rtw_mac_pre_system_cfg(rtwdev);
 	if (ret)
 		goto err;
@@ -420,6 +427,12 @@ err:
 
 void rtw_mac_power_off(struct rtw_dev *rtwdev)
 {
+	/* The RTL8188E shutdown sequence is not valid for the 9082XS. */
+	if (rtwdev->chip->efuse_id == 0x9082) {
+		clear_bit(RTW_FLAG_POWERON, rtwdev->flags);
+		return;
+	}
+
 	rtw_mac_power_switch(rtwdev, false);
 }
 
@@ -1057,11 +1070,17 @@ static int __rtw_download_firmware_9082xs(struct rtw_dev *rtwdev,
 	rtw_write8_set(rtwdev, REG_MCUFW_CTRL, BIT(7));
 	rtw_write8_clr(rtwdev, REG_MCUFW_CTRL + 2, BIT(4));
 	for (attempt = 0; attempt < 3; attempt++) {
+		ret = 0;
 		rtw_write8_set(rtwdev, REG_MCUFW_CTRL, BIT(5));
-		for (offset = 0; offset < size; offset += DLFW_PAGE_SIZE_LEGACY)
-			rtw_hci_write_firmware_page(rtwdev,
+		for (offset = 0; offset < size; offset += DLFW_PAGE_SIZE_LEGACY) {
+			ret = rtw_hci_write_firmware_page_checked(rtwdev,
 				offset / DLFW_PAGE_SIZE_LEGACY, data + offset,
 				min_t(u32, DLFW_PAGE_SIZE_LEGACY, size - offset));
+			if (ret)
+				break;
+		}
+		if (ret)
+			continue;
 		ret = rtw9082xs_wait_fw_bit(rtwdev, 5, 50);
 		if (!ret)
 			break;

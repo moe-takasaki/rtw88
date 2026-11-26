@@ -78,8 +78,11 @@ static u32 rtw_sdio_to_bus_offset(struct rtw_dev *rtwdev, u32 addr)
 static bool rtw_sdio_use_memcpy_io(struct rtw_dev *rtwdev, u32 addr,
 				   u8 alignment)
 {
+	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
+
 	return IS_ALIGNED(addr, alignment) &&
-	       test_bit(RTW_FLAG_POWERON, rtwdev->flags);
+	       (rtwsdio->is_9082xs ||
+		test_bit(RTW_FLAG_POWERON, rtwdev->flags));
 }
 
 static void rtw_sdio_writel(struct rtw_dev *rtwdev, u32 val, u32 addr,
@@ -1631,10 +1634,147 @@ static void rtw_sdio_declaim(struct rtw_dev *rtwdev,
 	sdio_release_host(sdio_func);
 }
 
+static u32 rtw9082xs_bus_addr(u16 reg)
+{
+	if (reg == 0x2086)
+		return reg;
+
+	return 0x10000 | (reg & 0x7fff);
+}
+
+static int rtw_sdio_power_on_9082xs(struct rtw_dev *rtwdev)
+{
+	static const struct {
+		u16 reg;
+		u8 mask;
+		u8 value;
+		bool poll;
+	} steps[] = {
+		{ 0x2086, 0x08, 0x00, false },
+		{ 0x2086, 0x04, 0x04, true },
+		{ 0x4005, 0x18, 0x00, false },
+		{ 0x4006, 0x40, 0x40, true },
+		{ 0x4002, 0xc0, 0x00, false },
+		{ 0x4026, 0x01, 0x01, false },
+		{ 0x4005, 0x01, 0x00, false },
+		{ 0x4005, 0x18, 0x00, false },
+		{ 0x4005, 0x80, 0x80, false },
+		{ 0x4005, 0x80, 0x00, true },
+		{ 0x4023, 0x08, 0x00, false },
+	};
+	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
+	struct sdio_func *func = rtwsdio->sdio_func;
+	u32 addr;
+	u16 word;
+	u8 value;
+	int i = 0, j, ret = 0;
+
+	if (!rtwsdio->is_9082xs)
+		return -EOPNOTSUPP;
+
+	sdio_claim_host(func);
+	sdio_writeb(func, 0, rtw9082xs_bus_addr(0x401c), &ret);
+	if (ret)
+		goto out;
+
+	for (i = 0; i < ARRAY_SIZE(steps); i++) {
+		addr = rtw9082xs_bus_addr(steps[i].reg);
+		if (!steps[i].poll) {
+			value = sdio_readb(func, addr, &ret);
+			if (ret)
+				goto out;
+			value = (value & ~steps[i].mask) | steps[i].value;
+			sdio_writeb(func, value, addr, &ret);
+			if (ret)
+				goto out;
+			continue;
+		}
+		for (j = 0; j < 5000; j++) {
+			value = sdio_readb(func, addr, &ret);
+			if (ret)
+				goto out;
+			if ((value & steps[i].mask) == steps[i].value)
+				break;
+			udelay(10);
+		}
+		if (j == 5000) {
+			ret = -ETIMEDOUT;
+			goto out;
+		}
+	}
+
+	word = sdio_readw(func, rtw9082xs_bus_addr(0x4004), &ret);
+	if (ret)
+		goto out;
+	sdio_writew(func, word | 0x0008, rtw9082xs_bus_addr(0x4004),
+		    &ret);
+	if (ret)
+		goto out;
+	word = sdio_readw(func, rtw9082xs_bus_addr(0x4100), &ret);
+	if (ret)
+		goto out;
+	sdio_writew(func, word | 0x60fc, rtw9082xs_bus_addr(0x4100),
+		    &ret);
+out:
+	sdio_release_host(func);
+	if (ret)
+		rtw_err(rtwdev, "9082XS power-on step %d failed: %d\n", i,
+			ret);
+	return ret;
+}
+
+static int rtw_sdio_write_firmware_page_9082xs(struct rtw_dev *rtwdev,
+						u32 page, const u8 *data,
+						u32 size)
+{
+	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
+	struct sdio_func *func = rtwsdio->sdio_func;
+	u32 selector_addr, data_addr, i = 0;
+	u8 selector;
+	int ret = 0;
+
+	if (!rtwsdio->is_9082xs)
+		return -EOPNOTSUPP;
+
+	selector_addr = rtw_sdio_to_io_address(rtwdev,
+						   REG_MCUFW_CTRL + 2, true);
+	data_addr = rtw_sdio_to_io_address(rtwdev,
+						 FW_START_ADDR_LEGACY, true);
+	sdio_claim_host(func);
+	selector = sdio_readb(func, selector_addr, &ret);
+	if (ret)
+		goto out;
+	selector = (selector & 0x1f) | ((page & 1) << 7) |
+		   ((page & 2) << 5);
+	sdio_writeb(func, selector, selector_addr, &ret);
+	if (ret)
+		goto out;
+
+	for (i = 0; i + sizeof(u32) <= size; i += sizeof(u32)) {
+		sdio_writel(func, get_unaligned_le32(data + i), data_addr + i,
+			    &ret);
+		if (ret)
+			goto out;
+	}
+	for (; i < size; i++) {
+		sdio_writeb(func, data[i], data_addr + i, &ret);
+		if (ret)
+			goto out;
+	}
+
+out:
+	sdio_release_host(func);
+	if (ret)
+		rtw_err(rtwdev, "9082XS firmware page %u, offset %u failed: %d\n",
+			page, i, ret);
+	return ret;
+}
+
 static const struct rtw_hci_ops rtw_sdio_ops = {
 	.tx_write = rtw_sdio_tx_write,
 	.tx_kick_off = rtw_sdio_tx_kick_off,
 	.setup = rtw_sdio_setup,
+	.power_on_chip = rtw_sdio_power_on_9082xs,
 	.start = rtw_sdio_start,
 	.stop = rtw_sdio_stop,
 	.deep_ps = rtw_sdio_deep_ps,
@@ -1642,6 +1782,7 @@ static const struct rtw_hci_ops rtw_sdio_ops = {
 	.interface_cfg = rtw_sdio_interface_cfg,
 	.dynamic_rx_agg = NULL,
 	.write_firmware_page = rtw_write_firmware_page,
+	.write_firmware_page_checked = rtw_sdio_write_firmware_page_9082xs,
 
 	.read8 = rtw_sdio_read8,
 	.read16 = rtw_sdio_read16,

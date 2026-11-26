@@ -41,6 +41,7 @@ static void switch_efuse_bank(struct rtw_dev *rtwdev)
 static int rtw_dump_logical_efuse_map(struct rtw_dev *rtwdev, u8 *phy_map,
 				      u8 *log_map)
 {
+	const struct rtw_chip_info *chip = rtwdev->chip;
 	u32 physical_size = rtwdev->efuse.physical_size;
 	u32 protect_size = rtwdev->efuse.protect_size;
 	u32 logical_size = rtwdev->efuse.logical_size;
@@ -53,7 +54,10 @@ static int rtw_dump_logical_efuse_map(struct rtw_dev *rtwdev, u8 *phy_map,
 	for (phy_idx = 0; phy_idx < physical_size - protect_size;) {
 		hdr1 = phy_map[phy_idx];
 		hdr2 = phy_map[phy_idx + 1];
-		if (invalid_efuse_header(hdr1, hdr2))
+		/* 9082XS may have an empty extended header before later records. */
+		if (hdr1 == 0xff ||
+		    (chip->efuse_id != 0x9082 &&
+		     invalid_efuse_header(hdr1, hdr2)))
 			break;
 
 		if ((hdr1 & 0x1f) == 0xf) {
