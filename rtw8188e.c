@@ -279,6 +279,60 @@ static const struct rtw_pwr_seq_cmd * const card_disable_flow_8188e[] = {
 	NULL
 };
 
+static const struct rtw_pwr_seq_cmd enter_lps_9082xs[] = {
+	{0x0522, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_WRITE, 0xff, 0xfe},
+	{0x05f8, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_POLLING, 0xff, 0},
+	{0x05f9, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_POLLING, 0xff, 0},
+	{0x05fa, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_POLLING, 0xff, 0},
+	{0x05fb, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_POLLING, 0xff, 0},
+	{0x0002, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_WRITE, BIT(7), 0},
+	{0x0002, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_DELAY, 0, RTW_PWR_DELAY_US},
+	{0x0100, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_WRITE, 0xff, 0xfc},
+	{0x0101, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_WRITE, BIT(6), 0},
+	{0x0553, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_WRITE, BIT(2), BIT(2)},
+	{ .cmd = RTW_PWR_CMD_END },
+};
+
+static const struct rtw_pwr_seq_cmd close_9082xs[] = {
+	{0x001f, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_WRITE, 0xff, 0},
+	{0x0023, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_WRITE, BIT(3), BIT(3)},
+	{0x0005, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_WRITE, BIT(6), BIT(6)},
+	{0x0005, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_POLLING, BIT(6), 0},
+	{0x0026, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_WRITE, BIT(0), BIT(0)},
+	{0x0005, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_WRITE, BIT(3) | BIT(4), BIT(4)},
+	{0x0007, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_WRITE, 0xff, 0},
+	{0x0041, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_MAC, RTW_PWR_CMD_WRITE, BIT(3), 0},
+	{0x0086, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_SDIO, RTW_PWR_CMD_WRITE, BIT(3), BIT(3)},
+	{0x0086, RTW_PWR_CUT_ALL_MSK, RTW_PWR_INTF_SDIO_MSK,
+	 RTW_PWR_ADDR_SDIO, RTW_PWR_CMD_POLLING, BIT(2), 0},
+	{ .cmd = RTW_PWR_CMD_END },
+};
+
+static const struct rtw_pwr_seq_cmd * const card_disable_flow_9082xs[] = {
+	enter_lps_9082xs,
+	close_9082xs,
+	NULL,
+};
+
 static const struct rtw_page_table page_table_8188e[] = {
 	{12, 0, 9, 0, 1},
 };
@@ -2915,7 +2969,7 @@ const struct rtw_chip_info rtw9082xs_hw_spec = {
 	.ht_supported = true,
 	.lps_deep_mode_supported = 0,
 	.pwr_on_seq = card_enable_flow_9082xs,
-	.pwr_off_seq = card_disable_flow_8188e,
+	.pwr_off_seq = card_disable_flow_9082xs,
 	.page_table = page_table_8188e,
 	.rqpn_table = rqpn_table_8188e,
 	.prioq_addrs = &rtw8188e_prioq_addrs,
