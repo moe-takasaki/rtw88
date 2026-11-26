@@ -3,6 +3,8 @@
  */
 
 #include <linux/devcoredump.h>
+#include <linux/bitrev.h>
+#include <linux/unaligned.h>
 
 #include "main.h"
 #include "regd.h"
@@ -939,7 +941,21 @@ void rtw_chip_prepare_tx(struct rtw_dev *rtwdev)
 
 static void rtw_vif_write_addr(struct rtw_dev *rtwdev, u32 start, u8 *addr)
 {
+	bool is_9082xs_bssid = start == 0x0618 || start == 0x0708;
 	int i;
+
+	if (rtwdev->chip->efuse_id == 0x9082 &&
+	    (start == 0x0610 || start == 0x0700 || is_9082xs_bssid)) {
+		/* 9082XS uses a word write for the first four address bytes;
+		 * the final BSSID bytes use the chip's reversed bit order.
+		 */
+		rtw_write32(rtwdev, start, get_unaligned_le32(addr));
+		rtw_write8(rtwdev, start + 4,
+			   is_9082xs_bssid ? bitrev8(addr[4]) : addr[4]);
+		rtw_write8(rtwdev, start + 5,
+			   is_9082xs_bssid ? bitrev8(addr[5]) : addr[5]);
+		return;
+	}
 
 	for (i = 0; i < ETH_ALEN; i++)
 		rtw_write8(rtwdev, start + i, addr[i]);
