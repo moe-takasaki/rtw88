@@ -1405,6 +1405,7 @@ struct rtw_chip_info {
 	u8 id;
 
 	const char *fw_name;
+	bool raw_legacy_fw;
 	enum rtw_wlan_cpu wlan_cpu;
 	u8 tx_pkt_desc_sz;
 	u8 tx_buf_desc_sz;

@@ -2,6 +2,8 @@
 /* Copyright(c) 2018-2019  Realtek Corporation
  */
 
+#include <linux/unaligned.h>
+
 #include "main.h"
 #include "mac.h"
 #include "reg.h"
@@ -874,6 +876,21 @@ void rtw_write_firmware_page(struct rtw_dev *rtwdev, u32 page,
 	u32 block;
 	__le32 remain_data = 0;
 
+	if (rtwdev->chip->raw_legacy_fw) {
+		u8 selector = rtw_read8(rtwdev, REG_MCUFW_CTRL + 2);
+		u32 i;
+
+		selector = (selector & 0x1f) | ((page & 1) << 7) |
+			   ((page & 2) << 5);
+		rtw_write8(rtwdev, REG_MCUFW_CTRL + 2, selector);
+		for (i = 0; i + sizeof(u32) <= size; i += sizeof(u32))
+			rtw_write32(rtwdev, write_addr + i,
+				    get_unaligned_le32(data + i));
+		for (; i < size; i++)
+			rtw_write8(rtwdev, write_addr + i, data[i]);
+		return;
+	}
+
 	block_nr = size >> DLFW_BLK_SIZE_SHIFT_LEGACY;
 	remain_size = size & (DLFW_BLK_SIZE_LEGACY - 1);
 
@@ -993,9 +1010,88 @@ out:
 	return ret;
 }
 
+static void rtw9082xs_reset_mcu(struct rtw_dev *rtwdev)
+{
+	u8 sys;
+
+	rtw_write8_clr(rtwdev, 0x001c, BIT(6));
+	rtw_write8_clr(rtwdev, 0x001d, BIT(4));
+	sys = rtw_read8(rtwdev, REG_SYS_FUNC_EN + 1);
+	rtw_write8(rtwdev, REG_SYS_FUNC_EN + 1, sys & ~BIT(5));
+	rtw_write8_clr(rtwdev, 0x001c, BIT(6));
+	rtw_write8_set(rtwdev, 0x001d, BIT(4));
+	rtw_write8(rtwdev, REG_SYS_FUNC_EN + 1, sys | BIT(5));
+}
+
+static int rtw9082xs_wait_fw_bit(struct rtw_dev *rtwdev, u8 bit,
+				unsigned int timeout_ms)
+{
+	unsigned long deadline = jiffies + msecs_to_jiffies(timeout_ms);
+	u32 status;
+
+	do {
+		status = rtw_read32(rtwdev, REG_MCUFW_CTRL);
+		if (status & BIT(bit))
+			return 0;
+		udelay(10);
+	} while (time_before(jiffies, deadline));
+
+	rtw_err(rtwdev, "9082XS firmware status bit %u timeout: %#x\n",
+		bit, status);
+	return -ETIMEDOUT;
+}
+
+static int __rtw_download_firmware_9082xs(struct rtw_dev *rtwdev,
+					   struct rtw_fw_state *fw)
+{
+	const u8 *data = fw->firmware->data;
+	u32 size = fw->firmware->size;
+	u32 status, offset;
+	int attempt, ret;
+
+	if (rtw_read8(rtwdev, REG_MCUFW_CTRL) & BIT(0)) {
+		rtw_write8(rtwdev, REG_MCUFW_CTRL, 0);
+		rtw9082xs_reset_mcu(rtwdev);
+	}
+
+	rtw_write8_set(rtwdev, REG_MCUFW_CTRL, BIT(7));
+	rtw_write8_clr(rtwdev, REG_MCUFW_CTRL + 2, BIT(4));
+	for (attempt = 0; attempt < 3; attempt++) {
+		rtw_write8_set(rtwdev, REG_MCUFW_CTRL, BIT(5));
+		for (offset = 0; offset < size; offset += DLFW_PAGE_SIZE_LEGACY)
+			rtw_hci_write_firmware_page(rtwdev,
+				offset / DLFW_PAGE_SIZE_LEGACY, data + offset,
+				min_t(u32, DLFW_PAGE_SIZE_LEGACY, size - offset));
+		ret = rtw9082xs_wait_fw_bit(rtwdev, 5, 50);
+		if (!ret)
+			break;
+	}
+	if (ret)
+		return ret;
+
+	rtw_write8_clr(rtwdev, REG_MCUFW_CTRL, BIT(7));
+	rtw_write8(rtwdev, REG_MCUFW_CTRL + 1, 0);
+	status = rtw_read32(rtwdev, REG_MCUFW_CTRL);
+	rtw_write32(rtwdev, REG_MCUFW_CTRL,
+		    (status & ~BIT(1)) | BIT(6));
+	rtw9082xs_reset_mcu(rtwdev);
+	ret = rtw9082xs_wait_fw_bit(rtwdev, 1, 200);
+	if (ret)
+		return ret;
+
+	rtw_hci_setup(rtwdev);
+	rtwdev->h2c.last_box_num = 0;
+	rtwdev->h2c.seq = 0;
+	set_bit(RTW_FLAG_FW_RUNNING, rtwdev->flags);
+	return 0;
+}
+
 static
 int _rtw_download_firmware(struct rtw_dev *rtwdev, struct rtw_fw_state *fw)
 {
+	if (rtwdev->chip->raw_legacy_fw)
+		return __rtw_download_firmware_9082xs(rtwdev, fw);
+
 	if (rtw_chip_wcpu_8051(rtwdev))
 		return __rtw_download_firmware_legacy(rtwdev, fw);
 

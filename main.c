@@ -1909,6 +1909,15 @@ static void __update_firmware_info_legacy(struct rtw_dev *rtwdev,
 static void update_firmware_info(struct rtw_dev *rtwdev,
 				 struct rtw_fw_state *fw)
 {
+	if (rtwdev->chip->raw_legacy_fw) {
+		fw->h2c_version = 0;
+		fw->version = 0;
+		fw->sub_version = 0;
+		fw->sub_index = 0;
+		fw->feature = 0;
+		return;
+	}
+
 	if (rtw_chip_wcpu_8051(rtwdev))
 		__update_firmware_info_legacy(rtwdev, fw);
 	else
@@ -1926,19 +1935,37 @@ static void rtw_load_firmware_cb(const struct firmware *firmware, void *context)
 		complete_all(&fw->completion);
 		return;
 	}
+	if (rtwdev->chip->raw_legacy_fw &&
+	    (!firmware->size || firmware->size > 0x4000)) {
+		rtw_err(rtwdev, "invalid raw firmware size: %zu\n",
+			firmware->size);
+		release_firmware(firmware);
+		complete_all(&fw->completion);
+		return;
+	}
 
 	fw->firmware = firmware;
 	update_firmware_info(rtwdev, fw);
 	complete_all(&fw->completion);
 
-	rtw_info(rtwdev, "%sFirmware version %u.%u.%u, H2C version %u\n",
-		 fw->type == RTW_WOWLAN_FW ? "WOW " : "",
-		 fw->version, fw->sub_version, fw->sub_index, fw->h2c_version);
+	if (rtwdev->chip->raw_legacy_fw)
+		rtw_info(rtwdev, "raw firmware (%zu bytes)\n",
+			 firmware->size);
+	else
+		rtw_info(rtwdev, "%sFirmware version %u.%u.%u, H2C version %u\n",
+			 fw->type == RTW_WOWLAN_FW ? "WOW " : "",
+			 fw->version, fw->sub_version, fw->sub_index,
+			 fw->h2c_version);
 
-	if (fw->type == RTW_NORMAL_FW)
-		snprintf(wiphy->fw_version, sizeof(wiphy->fw_version),
-			 "%u.%u.%u",
-			 fw->version, fw->sub_version, fw->sub_index);
+	if (fw->type == RTW_NORMAL_FW) {
+		if (rtwdev->chip->raw_legacy_fw)
+			strscpy(wiphy->fw_version, "raw",
+				sizeof(wiphy->fw_version));
+		else
+			snprintf(wiphy->fw_version, sizeof(wiphy->fw_version),
+				 "%u.%u.%u", fw->version,
+				 fw->sub_version, fw->sub_index);
+	}
 }
 
 static int rtw_load_firmware(struct rtw_dev *rtwdev, enum rtw_fw_type type)

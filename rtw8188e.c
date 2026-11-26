@@ -2895,7 +2895,8 @@ const struct rtw_chip_info rtw9082xs_hw_spec = {
 	.ops = &rtw8188e_ops,
 	.sta_priv_size = sizeof(struct rtw8188e_sta),
 	.id = RTW_CHIP_TYPE_8188E,
-	.fw_name = "rtw88/rtw8188e_fw.bin",
+	.fw_name = "tilk/9082xs-nic.bin",
+	.raw_legacy_fw = true,
 	.wlan_cpu = RTW_WCPU_8051,
 	.tx_pkt_desc_sz = 32,
 	.rx_pkt_desc_sz = 24,
@@ -2939,6 +2940,7 @@ const struct rtw_chip_info rtw9082xs_hw_spec = {
 EXPORT_SYMBOL(rtw9082xs_hw_spec);
 
 MODULE_FIRMWARE("rtw88/rtw8188e_fw.bin");
+MODULE_FIRMWARE("tilk/9082xs-nic.bin");
 
 MODULE_AUTHOR("Igor Listopad <dev@listopad.email>");
 MODULE_DESCRIPTION("Realtek 802.11n wireless 8188e driver");
