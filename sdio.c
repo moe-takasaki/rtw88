@@ -1197,6 +1197,20 @@ static int rtw_sdio_start(struct rtw_dev *rtwdev)
 static void rtw_sdio_stop(struct rtw_dev *rtwdev)
 {
 	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
+	int i;
+
+	if (rtwsdio->is_9082xs) {
+		/* A queued probe request must not access SDIO after power-off. */
+		cancel_delayed_work_sync(&rtwsdio->tx_handler_data->work);
+		for (i = 0; i < RTK_MAX_TX_QUEUE_NUM; i++) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 13, 0)
+			ieee80211_purge_tx_queue(rtwdev->hw,
+						 &rtwsdio->tx_queue[i]);
+#else
+			skb_queue_purge(&rtwsdio->tx_queue[i]);
+#endif
+		}
+	}
 
 	if (!rtwsdio->irq_claimed)
 		return;
