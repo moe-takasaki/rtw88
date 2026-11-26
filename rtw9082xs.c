@@ -4,6 +4,7 @@
 #include <linux/mmc/sdio_func.h>
 #include <linux/mmc/sdio_ids.h>
 #include <linux/module.h>
+#include <linux/slab.h>
 #include "main.h"
 #include "rtw8188e.h"
 #include "sdio.h"
@@ -13,14 +14,35 @@ module_param(experimental_hw_init, bool, 0600);
 MODULE_PARM_DESC(experimental_hw_init,
 		 "Allow unfinished 9082XS firmware and PHY initialization");
 
+static bool experimental_register_hw;
+module_param(experimental_register_hw, bool, 0600);
+MODULE_PARM_DESC(experimental_register_hw,
+		 "Register the unfinished 9082XS phy without bringing it up");
+
 static int rtw_9082xs_probe(struct sdio_func *func,
 			    const struct sdio_device_id *id)
 {
+	struct rtw_chip_info *chip;
+	struct sdio_device_id probe_id;
+
 	if (!experimental_hw_init)
 		return dev_err_probe(&func->dev, -EOPNOTSUPP,
 				     "9082XS firmware and PHY adaptation is incomplete\n");
 
-	return rtw_sdio_probe(func, id);
+	if (!experimental_register_hw)
+		return rtw_sdio_probe(func, id);
+
+	chip = devm_kmemdup(&func->dev, &rtw9082xs_hw_spec,
+			    sizeof(rtw9082xs_hw_spec), GFP_KERNEL);
+	if (!chip)
+		return -ENOMEM;
+
+	chip->stop_after_efuse = false;
+	probe_id = *id;
+	probe_id.driver_data = (kernel_ulong_t)chip;
+	dev_info(&func->dev, "experimental registration enabled\n");
+
+	return rtw_sdio_probe(func, &probe_id);
 }
 
 static const struct sdio_device_id rtw_9082xs_id_table[] = {

@@ -102,8 +102,12 @@ static int rtw_ops_config(struct ieee80211_hw *hw, u32 changed)
 		}
 	}
 
-	if (changed & IEEE80211_CONF_CHANGE_CHANNEL)
-		rtw_set_channel(rtwdev);
+	if (changed & IEEE80211_CONF_CHANGE_CHANNEL) {
+		/* 9082XS drops its WLAN register window while powered off. */
+		if (rtwdev->chip->efuse_id != 0x9082 ||
+		    test_bit(RTW_FLAG_POWERON, rtwdev->flags))
+			rtw_set_channel(rtwdev);
+	}
 
 	if ((changed & IEEE80211_CONF_CHANGE_IDLE) &&
 	    (hw->conf.flags & IEEE80211_CONF_IDLE) &&

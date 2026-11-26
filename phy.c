@@ -2419,6 +2419,11 @@ void rtw_phy_set_tx_power_level(struct rtw_dev *rtwdev, u8 channel)
 	struct rtw_hal *hal = &rtwdev->hal;
 	u8 path;
 
+	/* Regulatory notifications may arrive before 9082XS is powered on. */
+	if (chip->efuse_id == 0x9082 &&
+	    !test_bit(RTW_FLAG_POWERON, rtwdev->flags))
+		return;
+
 	mutex_lock(&hal->tx_power_mutex);
 
 	for (path = 0; path < hal->rf_path_num; path++)

@@ -1076,6 +1076,12 @@ static void rtw_sdio_enable_interrupt(struct rtw_dev *rtwdev)
 
 static void rtw_sdio_disable_interrupt(struct rtw_dev *rtwdev)
 {
+	struct rtw_sdio *rtwsdio = (struct rtw_sdio *)rtwdev->priv;
+
+	if (rtwsdio->is_9082xs &&
+	    !test_bit(RTW_FLAG_POWERON, rtwdev->flags))
+		return;
+
 	rtw_write32(rtwdev, REG_SDIO_HIMR, 0x0);
 }
 
