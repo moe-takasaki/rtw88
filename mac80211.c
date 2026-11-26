@@ -220,7 +220,8 @@ static int rtw_ops_add_interface(struct ieee80211_hw *hw,
 	case NL80211_IFTYPE_STATION:
 		rtw_add_rsvd_page_sta(rtwdev, rtwvif);
 		net_type = RTW_NET_NO_LINK;
-		bcn_ctrl = BIT_EN_BCN_FUNCTION;
+		bcn_ctrl = rtwdev->chip->efuse_id == 0x9082 && port == 0 ?
+			   0x98 : BIT_EN_BCN_FUNCTION;
 		break;
 	default:
 		WARN_ON(1);
@@ -449,6 +450,12 @@ static void rtw_ops_bss_info_changed(struct ieee80211_hw *hw,
 			rtw_set_ampdu_factor(rtwdev, vif, conf);
 
 			rtw_fw_beacon_filter_config(rtwdev, true, vif);
+			/* Android clears the physical TSF gate after join. */
+			if (rtwdev->chip->efuse_id == 0x9082 &&
+			    rtwvif->port == 0) {
+				rtwvif->bcn_ctrl &= ~BIT(3);
+				config |= PORT_SET_BCN_CTRL;
+			}
 		} else {
 			rtw_leave_lps(rtwdev);
 			rtw_bf_disassoc(rtwdev, vif, conf);
@@ -457,6 +464,11 @@ static void rtw_ops_bss_info_changed(struct ieee80211_hw *hw,
 			 */
 			if (test_bit(RTW_FLAG_SCANNING, rtwdev->flags))
 				rtw_hw_scan_abort(rtwdev);
+			if (rtwdev->chip->efuse_id == 0x9082 &&
+			    rtwvif->port == 0) {
+				rtwvif->bcn_ctrl |= BIT(3);
+				config |= PORT_SET_BCN_CTRL;
+			}
 
 		}
 

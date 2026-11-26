@@ -903,8 +903,15 @@ static void rtw8188e_set_default_port(struct rtw_dev *rtwdev,
 	struct ieee80211_vif *vif = rtwvif_to_vif(rtwvif);
 
 	/* LPS uses port0/MACID0; T firmware has no port-select command 0x2c. */
-	rtwvif->bcn_ctrl |= BIT_DIS_ATIM;
-	rtw_write8_set(rtwdev, rtwvif->conf->bcn_ctrl.addr, BIT_DIS_ATIM);
+	if (rtwdev->chip->efuse_id == 0x9082 && rtwvif->port == 0) {
+		/* DIS_ATIM is physical bit 7 in the Android port-0 value. */
+		rtwvif->bcn_ctrl |= BIT(7);
+		rtw_write8_set(rtwdev, rtwvif->conf->bcn_ctrl.addr, BIT(7));
+	} else {
+		rtwvif->bcn_ctrl |= BIT_DIS_ATIM;
+		rtw_write8_set(rtwdev, rtwvif->conf->bcn_ctrl.addr,
+			       BIT_DIS_ATIM);
+	}
 	rtw_write16(rtwdev, rtwvif->conf->aid.addr, 0xc000 | rtwvif->aid);
 	if (!rtwdev->ap_active)
 		rtw_write16(rtwdev, REG_MBSSID_BCN_SPACE, vif->bss_conf.beacon_int);
