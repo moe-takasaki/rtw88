@@ -11,6 +11,7 @@ extern const struct rtw_table rtw9082xs_mac_tbl;
 extern const struct rtw_table rtw9082xs_agc_tbl;
 extern const struct rtw_table rtw8188e_agc_tbl;
 extern const struct rtw_table rtw8188e_bb_tbl;
+extern const struct rtw_table rtw9082xs_phy_tbl;
 extern const struct rtw_table rtw8188e_bb_pg_tbl;
 extern const struct rtw_table rtw8188e_rf_a_tbl;
 extern const struct rtw_table rtw9082xs_rf_tbl;

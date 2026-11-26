@@ -69,7 +69,7 @@ obj-m		+= rtw_8703b.o
 rtw_8703b-objs	:= rtw8703b.o rtw8703b_tables.o
 
 obj-m		+= rtw_8188e.o
-rtw_8188e-objs	:= rtw8188e.o rtw8188e_table.o rtw9082xs_agc.o rtw9082xs_rf.o
+rtw_8188e-objs	:= rtw8188e.o rtw8188e_table.o rtw9082xs_phy.o rtw9082xs_agc.o rtw9082xs_rf.o
 
 ifneq ($(CONFIG_MMC), )
 obj-m		+= rtw_8189es.o
