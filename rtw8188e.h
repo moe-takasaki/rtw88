@@ -19,6 +19,7 @@ enum rtw8188e_flags {
 
 struct rtw8188e_priv {
 	unsigned long flags;
+	u32 rf18;
 	s8 l2h_th_min;
 	s8 h2l_th_min;
 	u8 adaptivity_igi_upper;

@@ -1643,6 +1643,7 @@ static void rtw8188e_pwrtrack_set_cck_pwr(struct rtw_dev *rtwdev, u8 channel)
 static void rtw8188e_phy_set_param(struct rtw_dev *rtwdev)
 {
 	const struct rtw_chip_info *chip = rtwdev->chip;
+	struct rtw8188e_priv *priv = rtwdev->chip_priv;
 	u32 rfmod_enable = BIT_CCKEN | BIT_OFDMEN;
 
 	rtw_load_table(rtwdev, chip->mac_tbl);
@@ -1657,6 +1658,9 @@ static void rtw8188e_phy_set_param(struct rtw_dev *rtwdev)
 	rtw8188e_phy_rf6052_config(rtwdev);
 	if (rtw_hci_get_io_error(rtwdev))
 		return;
+	/* Last RF table command for register 0x18 decodes to 0x0f407. */
+	if (chip->efuse_id == 0x9082)
+		priv->rf18 = 0x0f407;
 
 	/* The 9082XS BB register interface reverses bits within each byte. */
 	if (rtwdev->chip->efuse_id == 0x9082)
@@ -1681,9 +1685,16 @@ static void rtw8188e_phy_set_param(struct rtw_dev *rtwdev)
 static void rtw8188e_set_channel(struct rtw_dev *rtwdev, u8 channel,
 				 u8 bw, u8 primary)
 {
+	struct rtw8188e_priv *priv = rtwdev->chip_priv;
 	bool wide = bw == RTW_CHANNEL_WIDTH_40;
 	bool upper = primary == RTW_SC_20_UPPER;
-	u32 rf = rtw_read_rf(rtwdev, RF_PATH_A, RF_CFGCH, RFREG_MASK);
+	u32 rf;
+
+	/* The vendor 9082XS channel path uses a cache; RF reads return zero. */
+	if (rtwdev->chip->efuse_id == 0x9082)
+		rf = priv->rf18;
+	else
+		rf = rtw_read_rf(rtwdev, RF_PATH_A, RF_CFGCH, RFREG_MASK);
 
 	rtw_write8_mask(rtwdev, REG_BWOPMODE, BIT(2), !wide);
 	rtw_write32_mask(rtwdev, REG_FPGA0_RFMOD, BIT(0), wide);
@@ -1698,6 +1709,8 @@ static void rtw8188e_set_channel(struct rtw_dev *rtwdev, u8 channel,
 	}
 	rf &= ~(GENMASK(9, 0) | GENMASK(11, 10));
 	rf |= channel | ((wide ? 1 : 3) << 10);
+	if (rtwdev->chip->efuse_id == 0x9082)
+		priv->rf18 = rf;
 	rtw_write_rf(rtwdev, RF_PATH_A, RF_CFGCH, RFREG_MASK, rf);
 	rtw8188e_pwrtrack_set_cck_pwr(rtwdev, channel);
 }
