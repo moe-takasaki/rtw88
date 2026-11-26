@@ -1638,6 +1638,7 @@ static void rtw8188e_pwrtrack_set_cck_pwr(struct rtw_dev *rtwdev, u8 channel)
 static void rtw8188e_phy_set_param(struct rtw_dev *rtwdev)
 {
 	const struct rtw_chip_info *chip = rtwdev->chip;
+	u32 rfmod_enable = BIT_CCKEN | BIT_OFDMEN;
 
 	rtw_load_table(rtwdev, chip->mac_tbl);
 	if (rtw_hci_get_io_error(rtwdev))
@@ -1652,7 +1653,10 @@ static void rtw8188e_phy_set_param(struct rtw_dev *rtwdev)
 	if (rtw_hci_get_io_error(rtwdev))
 		return;
 
-	rtw_write32_set(rtwdev, REG_FPGA0_RFMOD, BIT_CCKEN | BIT_OFDMEN);
+	/* The 9082XS BB register interface reverses bits within each byte. */
+	if (rtwdev->chip->efuse_id == 0x9082)
+		rfmod_enable = (u32)bitrev8(rfmod_enable >> 24) << 24;
+	rtw_write32_set(rtwdev, REG_FPGA0_RFMOD, rfmod_enable);
 
 	rtw8188e_init_transfer_page_size(rtwdev);
 	rtw8188e_init_adaptive_ctrl(rtwdev);
