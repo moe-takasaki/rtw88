@@ -1475,6 +1475,14 @@ static void rtw8188e_dig_get_boundary(struct rtw_dev *rtwdev, u8 *upper,
 
 static void rtw8188e_phy_bb_config(struct rtw_dev *rtwdev)
 {
+	if (rtwdev->chip->efuse_id == 0x9082) {
+		/* ConfigPHY_BB9083X enables the BB and RF in this order. */
+		rtw_write16_set(rtwdev, REG_SYS_FUNC_EN, 0x04c0);
+		rtw_write8(rtwdev, REG_RF_CTRL, 0xe0);
+		rtw_write8(rtwdev, REG_SYS_FUNC_EN, 0xc7);
+		return;
+	}
+
 	rtw_write16_set(rtwdev, REG_SYS_FUNC_EN,
 			BIT_FEN_EN_25_1 | BIT_FEN_BB_GLB_RST | BIT_FEN_BB_RSTB);
 	rtw_write8(rtwdev, REG_RF_CTRL, WLAN_RF_CTRL_ENABLE);
