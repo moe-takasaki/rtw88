@@ -3,6 +3,7 @@
  */
 
 #include <linux/bcd.h>
+#include <linux/bitrev.h>
 
 #include "main.h"
 #include "reg.h"
@@ -1022,6 +1023,14 @@ u32 rtw_phy_read_rf(struct rtw_dev *rtwdev, enum rtw_rf_path rf_path,
 }
 EXPORT_SYMBOL(rtw_phy_read_rf);
 
+static u32 rtw_phy_9082xs_bitrev32(u32 value)
+{
+	return (u32)bitrev8(value) |
+	       ((u32)bitrev8(value >> 8) << 8) |
+	       ((u32)bitrev8(value >> 16) << 16) |
+	       ((u32)bitrev8(value >> 24) << 24);
+}
+
 u32 rtw_phy_read_rf_sipi(struct rtw_dev *rtwdev, enum rtw_rf_path rf_path,
 			 u32 addr, u32 mask)
 {
@@ -1060,10 +1069,16 @@ u32 rtw_phy_read_rf_sipi(struct rtw_dev *rtwdev, enum rtw_rf_path rf_path,
 
 	udelay(120);
 
-	en_pi = rtw_read32_mask(rtwdev, rf_sipi_addr->hssi_1, BIT(8));
+	/* 9082XS reads the PI selector through a bit-reversing BB accessor. */
+	en_pi = rtw_read32_mask(rtwdev, rf_sipi_addr->hssi_1,
+				chip->efuse_id == 0x9082 ? BIT(15) : BIT(8));
 	r_addr = en_pi ? rf_sipi_addr->lssi_read_pi : rf_sipi_addr->lssi_read;
 
-	val32 = rtw_read32_mask(rtwdev, r_addr, LSSI_READ_DATA_MASK);
+	if (chip->efuse_id == 0x9082)
+		val32 = rtw_phy_9082xs_bitrev32(rtw_read32(rtwdev, r_addr)) &
+			LSSI_READ_DATA_MASK;
+	else
+		val32 = rtw_read32_mask(rtwdev, r_addr, LSSI_READ_DATA_MASK);
 
 	shift = __ffs(mask);
 
@@ -1102,6 +1117,8 @@ bool rtw_phy_write_rf_reg_sipi(struct rtw_dev *rtwdev, enum rtw_rf_path rf_path,
 	}
 
 	data_and_addr = ((addr << 20) | (data & 0x000fffff)) & 0x0fffffff;
+	if (chip->efuse_id == 0x9082)
+		data_and_addr = rtw_phy_9082xs_bitrev32(data_and_addr);
 
 	rtw_write32(rtwdev, sipi_addr[rf_path], data_and_addr);
 
