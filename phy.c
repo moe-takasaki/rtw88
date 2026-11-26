@@ -2380,6 +2380,9 @@ rtw_phy_get_tx_power_index(struct rtw_dev *rtwdev, u8 rf_path, u8 rate,
 		offset += rtw_phy_get_dis_dpd_by_rate_diff(rtwdev, rate);
 
 	tx_power += offset + pwr_param.pwr_remnant;
+	/* The 9082XS vendor index path attenuates only the 2M CCK rate. */
+	if (rtwdev->chip->efuse_id == 0x9082 && rate == DESC_RATE2M)
+		tx_power = tx_power > 9 ? tx_power - 9 : 0;
 
 	if (tx_power > rtwdev->chip->max_power_index)
 		tx_power = rtwdev->chip->max_power_index;
