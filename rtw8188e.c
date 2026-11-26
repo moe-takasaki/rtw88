@@ -1458,17 +1458,38 @@ static void rtw8188e_phy_bb_config(struct rtw_dev *rtwdev)
 	rtw_write8(rtwdev, REG_RF_CTRL, WLAN_RF_CTRL_ENABLE);
 }
 
+static u32 rtw8188e_9082xs_bitrev32(u32 value)
+{
+	return (u32)bitrev8(value) |
+	       ((u32)bitrev8(value >> 8) << 8) |
+	       ((u32)bitrev8(value >> 16) << 16) |
+	       ((u32)bitrev8(value >> 24) << 24);
+}
+
 static void rtw8188e_phy_load_bb_tables(struct rtw_dev *rtwdev)
 {
 	const struct rtw_chip_info *chip = rtwdev->chip;
 	u8 xtal_cap = rtwdev->efuse.crystal_cap & 0x3f;
+	u32 value;
 
 	rtw_load_table(rtwdev, chip->bb_tbl);
 	if (rtw_hci_get_io_error(rtwdev))
 		return;
 	rtw_load_table(rtwdev, chip->agc_tbl);
-	rtw_write32_mask(rtwdev, REG_AFE_CTRL1, GENMASK(22, 11),
-			 xtal_cap | (xtal_cap << 6));
+	value = xtal_cap | (xtal_cap << 6);
+	if (chip->efuse_id == 0x9082) {
+		/* The vendor crystal setting uses the bit-reversing BB accessor. */
+		u32 logical = rtw8188e_9082xs_bitrev32(
+			rtw_read32(rtwdev, REG_AFE_CTRL1));
+
+		logical = (logical & ~GENMASK(22, 11)) |
+			  ((value << 11) & GENMASK(22, 11));
+		rtw_write32(rtwdev, REG_AFE_CTRL1,
+			    rtw8188e_9082xs_bitrev32(logical));
+	} else {
+		rtw_write32_mask(rtwdev, REG_AFE_CTRL1,
+				 GENMASK(22, 11), value);
+	}
 }
 
 static void rtw8188e_phy_rf6052_config(struct rtw_dev *rtwdev)
