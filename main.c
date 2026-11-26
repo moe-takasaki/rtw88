@@ -978,7 +978,15 @@ void rtw_vif_port_config(struct rtw_dev *rtwdev,
 	if (config & PORT_SET_NET_TYPE) {
 		addr = rtwvif->conf->net_type.addr;
 		mask = rtwvif->conf->net_type.mask;
-		rtw_write32_mask(rtwdev, addr, mask, rtwvif->net_type);
+		if (rtwdev->chip->efuse_id == 0x9082 && rtwvif->port == 0) {
+			u8 msr = rtw_read8(rtwdev, REG_CR + 2);
+
+			/* Android MSR_set reverses the port-0 mode bits. */
+			msr = (msr & 0x30) | bitrev8(rtwvif->net_type);
+			rtw_write8(rtwdev, REG_CR + 2, msr);
+		} else {
+			rtw_write32_mask(rtwdev, addr, mask, rtwvif->net_type);
+		}
 	}
 	if (config & PORT_SET_AID) {
 		addr = rtwvif->conf->aid.addr;
