@@ -3,6 +3,8 @@
  * Copyright(c) 2026 Igor Listopad <dev@listopad.email>
  */
 
+#include <linux/bitrev.h>
+
 #include "main.h"
 #include "phy.h"
 #include "rtw8188e_table.h"
@@ -113,6 +115,23 @@ static const u32 rtw8188e_mac[] = {
 };
 
 RTW_DECL_TABLE_PHY_COND(rtw8188e_mac, rtw_phy_cfg_mac);
+
+static void rtw9082xs_cfg_mac(struct rtw_dev *rtwdev,
+			      const struct rtw_table *tbl, u32 addr, u32 data)
+{
+	/* The 9082XS MAC table stores each byte with its bits reversed. */
+	if (addr != 0x458)
+		data = bitrev8(data);
+
+	rtw_write8(rtwdev, addr, data);
+}
+
+const struct rtw_table rtw9082xs_mac_tbl = {
+	.data = rtw8188e_mac,
+	.size = ARRAY_SIZE(rtw8188e_mac),
+	.parse = rtw_parse_tbl_phy_cond,
+	.do_cfg = rtw9082xs_cfg_mac,
+};
 
 static const u32 rtw8188e_agc[] = {
 	/* For indices 0x00-0x39, the fallback profile is for the internal LNA. */

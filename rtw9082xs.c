@@ -26,7 +26,7 @@ static int rtw_9082xs_probe(struct sdio_func *func,
 static const struct sdio_device_id rtw_9082xs_id_table[] = {
 	{
 		SDIO_DEVICE(0x02e7, 0x9082),
-		.driver_data = (kernel_ulong_t)&rtw8188e_hw_spec,
+		.driver_data = (kernel_ulong_t)&rtw9082xs_hw_spec,
 	},
 	{}
 };

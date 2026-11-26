@@ -9,6 +9,7 @@
 #define __RTW8188E_H__
 
 extern const struct rtw_chip_info rtw8188e_hw_spec;
+extern const struct rtw_chip_info rtw9082xs_hw_spec;
 
 #define RTW8188E_CHIP_VER_CUT_I		8
 

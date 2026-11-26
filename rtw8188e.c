@@ -2851,6 +2851,53 @@ const struct rtw_chip_info rtw8188e_hw_spec = {
 };
 EXPORT_SYMBOL(rtw8188e_hw_spec);
 
+const struct rtw_chip_info rtw9082xs_hw_spec = {
+	.ops = &rtw8188e_ops,
+	.sta_priv_size = sizeof(struct rtw8188e_sta),
+	.id = RTW_CHIP_TYPE_8188E,
+	.fw_name = "rtw88/rtw8188e_fw.bin",
+	.wlan_cpu = RTW_WCPU_8051,
+	.tx_pkt_desc_sz = 32,
+	.rx_pkt_desc_sz = 24,
+	.phy_efuse_size = 256,
+	.log_efuse_size = 512,
+	.ptct_efuse_size = 18,
+	.txff_size = 22528,
+	.rxff_size = 10240,
+	.rsvd_drv_pg_num = 8,
+	.txgi_factor = 1,
+	.is_pwr_by_rate_dec = true,
+	.max_power_index = 0x3f,
+	.band = RTW_BAND_2G,
+	.page_size = 128,
+	.dig_min = 0x20,
+	.ht_supported = true,
+	.lps_deep_mode_supported = 0,
+	.pwr_on_seq = card_enable_flow_8188e,
+	.pwr_off_seq = card_disable_flow_8188e,
+	.page_table = page_table_8188e,
+	.rqpn_table = rqpn_table_8188e,
+	.prioq_addrs = &rtw8188e_prioq_addrs,
+	.dig = rtw8188e_dig,
+	.edcca_th = rtw8188e_edcca_th,
+	.l2h_th_ini_ad = -11,
+	.l2h_th_ini_cs = 10,
+	.rf_sipi_addr = {0x840},
+	.rf_sipi_read_addr = rtw8188e_rf_sipi_addr,
+	.fix_rf_phy_num = 1,
+	.mac_tbl = &rtw9082xs_mac_tbl,
+	.agc_tbl = &rtw8188e_agc_tbl,
+	.bb_tbl = &rtw8188e_bb_tbl,
+	.rf_tbl = {&rtw8188e_rf_a_tbl},
+	.rfe_defs = rtw8188e_rfe_defs,
+	.rfe_defs_size = ARRAY_SIZE(rtw8188e_rfe_defs),
+	.iqk_threshold = 8,
+	.lck_threshold = 8,
+	.ampdu_density = IEEE80211_HT_MPDU_DENSITY_16,
+	.max_scan_ie_len = IEEE80211_MAX_DATA_LEN,
+};
+EXPORT_SYMBOL(rtw9082xs_hw_spec);
+
 MODULE_FIRMWARE("rtw88/rtw8188e_fw.bin");
 
 MODULE_AUTHOR("Igor Listopad <dev@listopad.email>");
